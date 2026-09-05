@@ -144,6 +144,35 @@ test('a burst of output is batched instead of parsed piece by piece', async t =>
   console.log(`      (ráfaga de 20000 líneas: ${outputs} mensajes en ${Date.now() - started} ms)`);
 });
 
+test('reattaching sends a trimmed snapshot, answers a ping and serves the full history on request', async t => {
+  const f = await fixture(t); const cookie = await f.login();
+  const s = await f.app.sessions.create({});
+  const a = connect(f, s.id, cookie);
+  await a.until(m => text(m).includes('POCKET_READY'));
+  a.write('burst 1200\r');
+  await a.until(m => text(m).includes('BURST_DONE'));
+  a.ws.close(); await once(a.ws, 'close');
+
+  const b = connect(f, s.id, cookie);
+  await b.until(m => m.some(x => x.type === 'snapshot'));
+  const first = b.messages.find(m => m.type === 'snapshot');
+  // Returning to the foreground must not re-download the whole scrollback.
+  assert.equal(first.scrollback, f.config.snapshotScrollback);
+  assert.ok(first.hasMore, 'El servidor no avisó de que quedaba más historial.');
+  assert.ok(!first.data.includes('L0 '), 'El primer snapshot trajo el historial entero.');
+  assert.ok(first.data.includes('L1199 '), 'El primer snapshot perdió el final del historial.');
+
+  // The client uses this round trip to tell a frozen socket from a live one.
+  b.ws.send(JSON.stringify({ type: 'ping' }));
+  await b.until(m => m.some(x => x.type === 'pong'));
+
+  b.ws.send(JSON.stringify({ type: 'history' }));
+  await b.until(m => m.some(x => x.type === 'snapshot' && x.full));
+  const full = b.messages.find(m => m.type === 'snapshot' && m.full);
+  assert.ok(full.data.includes('L0 '), 'El historial completo no llegó al pedirlo.');
+  assert.equal(f.app.sessions.items.get(s.id).exited, false);
+});
+
 test('logout revokes open WebSockets without killing the PTY', async t => {
   const f = await fixture(t); const cookie = await f.login(); const s = await f.app.sessions.create({});
   const a = connect(f, s.id, cookie); await a.until(m => m.some(x => x.type === 'snapshot'));

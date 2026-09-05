@@ -37,7 +37,7 @@ export class Sessions {
       try { cwd = await realpath(cwd); }
       catch { throw new Error('No se encuentra esa carpeta en tu ordenador.'); }
       if (!(await stat(cwd)).isDirectory()) throw new Error('La ruta no es una carpeta.');
-      term = new Terminal({ cols, rows, scrollback: 3000, allowProposedApi: true });
+      term = new Terminal({ cols, rows, scrollback: this.config.scrollback, allowProposedApi: true });
       const serializer = new SerializeAddon();
       term.loadAddon(serializer);
       const env = Object.fromEntries(Object.entries(process.env).filter(([, value]) => typeof value === 'string'));
@@ -97,6 +97,13 @@ export class Sessions {
     if (ws.bufferedAmount > 2 * 1024 * 1024) { ws.close(1013, 'Conexión lenta; vuelve a conectar'); return; }
     ws.send(JSON.stringify(payload));
   }
+  // A phone reattaches on every return to the foreground, so the default
+  // snapshot stays small: the screen plus `scrollback` lines behind it.
+  // `hasMore` tells the client that asking for the rest is worth it.
+  snapshot(s, scrollback) {
+    const stored = Math.max(0, s.term.buffer.active.length - s.term.rows);
+    return { type: 'snapshot', ...this.info(s), scrollback, hasMore: stored > scrollback, data: s.serializer.serialize({ scrollback }) };
+  }
   attach(id, ws, authorized = () => true) {
     const s = this.items.get(id);
     if (!s) { ws.close(4404, 'La sesión ya no existe'); return; }
@@ -116,7 +123,13 @@ export class Sessions {
             s.term.resize(cols, rows);
             s.pty.resize(cols, rows);
           });
-        } else if (message.type !== 'ping') throw new Error('Mensaje inválido');
+        } else if (message.type === 'history') {
+          this.enqueue(s, () => { if (s.client === ws) this.send(ws, { ...this.snapshot(s, this.config.scrollback), full: true }); });
+        } else if (message.type === 'ping') {
+          // Answered outside the queue: the client uses the round trip to tell a
+          // frozen socket from a live one, so a busy terminal must not delay it.
+          this.send(ws, { type: 'pong' });
+        } else throw new Error('Mensaje inválido');
       } catch { ws.close(1008, 'Mensaje inválido'); }
     });
     s.flush?.();
@@ -124,7 +137,7 @@ export class Sessions {
       if (ws.readyState !== 1) return;
       if (s.client && s.client !== ws) s.client.close(4409, 'Sesión abierta en otro dispositivo');
       s.client = ws;
-      this.send(ws, { type: 'snapshot', ...this.info(s), data: s.serializer.serialize({ scrollback: 3000 }) });
+      this.send(ws, this.snapshot(s, this.config.snapshotScrollback));
     });
   }
   async remove(id) {

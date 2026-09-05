@@ -15,6 +15,7 @@ const fit = new FitAddon(); term.loadAddon(fit);
 let opened = false, socket = null, selected = null, state = null;
 let online = false, restoring = false, exited = false, locked = true;
 let retryTimer, noticeTimer, generation = 0, retryCount = 0, ctrl = false, stopRetry = false;
+let probeTimer = null, hasMore = false, historyPending = false;
 
 async function api(path, options = {}) {
   const res = await fetch(`/api${path}`, {
@@ -77,8 +78,30 @@ term.onData(data => {
 function setCtrl(value) { ctrl = value; $('ctrl-key').setAttribute('aria-pressed', String(value)); }
 
 function disconnect() {
-  generation++; clearTimeout(retryTimer); online = false; restoring = false;
+  generation++; clearTimeout(retryTimer); clearTimeout(probeTimer); probeTimer = null;
+  online = false; restoring = false; historyPending = false;
   const old = socket; socket = null; old?.close();
+}
+// Rebuild the connection without clearing the screen first. The snapshot
+// handler replaces the contents once it arrives, so the text stays readable
+// throughout instead of blanking on every return to the foreground.
+function reattach() {
+  if (locked || !selected || stopRetry) return;
+  disconnect(); retryCount = 0; connect();
+}
+// A mobile browser can freeze a socket without ever firing close, so an open
+// readyState proves nothing. Ask for a round trip and only rebuild the
+// connection when the answer fails to arrive.
+function probe() {
+  if (locked || !selected || stopRetry || probeTimer) return;
+  if (!online || socket?.readyState !== WebSocket.OPEN) { reattach(); return; }
+  if (send({ type: 'ping' })) probeTimer = setTimeout(() => { probeTimer = null; reattach(); }, 2500);
+  else reattach();
+}
+function requestHistory() {
+  if (!hasMore || historyPending || restoring || !online) return;
+  historyPending = send({ type: 'history' });
+  if (historyPending) notice('Cargando el historial anterior…');
 }
 function showLogin() {
   locked = true; disconnect(); term.reset();
@@ -95,7 +118,7 @@ function options() {
 async function refresh() { state = await api('/state'); options(); }
 function empty() {
   disconnect(); selected = null; term.reset();
-  $('terminal').hidden = true; $('empty-state').hidden = false;
+  $('terminal').hidden = true; $('empty-state').hidden = false; pad.hidden = true;
   status('Sin terminales abiertas'); options();
 }
 async function unlock() {
@@ -109,7 +132,7 @@ async function unlock() {
 function choose(id) {
   disconnect(); selected = id; retryCount = 0; stopRetry = false;
   savePref('pocket-session', id); options();
-  $('empty-state').hidden = true; $('terminal').hidden = false;
+  $('empty-state').hidden = true; $('terminal').hidden = false; pad.hidden = false;
   if (!opened) { term.open($('terminal')); opened = true; }
   term.reset(); fit.fit(); connect();
 }
@@ -124,15 +147,21 @@ function connect() {
     let message;
     try { message = JSON.parse(event.data); } catch { ws.close(); return; }
     if (message.type === 'snapshot') {
+      // How far up the user had scrolled, so the same text stays on screen
+      // after the snapshot replaces the buffer.
+      const fromBottom = term.buffer.active.baseY - term.buffer.active.viewportY;
       restoring = true; exited = message.exited;
+      hasMore = Boolean(message.hasMore); historyPending = false;
       term.reset(); term.resize(message.cols, message.rows);
       term.write(message.data, () => {
         if (mine !== generation) return;
         restoring = false; online = true; retryCount = 0;
+        if (fromBottom > 0) term.scrollLines(-Math.min(fromBottom, term.buffer.active.baseY));
         status(exited ? `Finalizada · código ${message.exitCode}` : 'Conectada', exited ? '' : 'online');
         resize();
       });
     } else if (message.type === 'output') term.write(message.data);
+    else if (message.type === 'pong') { clearTimeout(probeTimer); probeTimer = null; }
     else if (message.type === 'exit') {
       exited = true; status(`Finalizada · código ${message.exitCode}`);
       refresh().catch(() => {});
@@ -221,15 +250,14 @@ $('end-form').onsubmit = async event => {
 };
 
 const keys = { escape: '\x1b', tab: '\t', interrupt: '\x03', up: '\x1b[A', down: '\x1b[B', left: '\x1b[D', right: '\x1b[C', enter: '\r' };
+// Full-screen programs ask for the application form of the cursor keys.
+const cursorKey = name => term.modes.applicationCursorKeysMode ? keys[name].replace('[', 'O') : keys[name];
 document.querySelectorAll('[data-key]').forEach(button => {
   button.addEventListener('pointerdown', event => event.preventDefault());
   button.onclick = () => {
     setCtrl(false);
-    let data = keys[button.dataset.key];
-    if (['up', 'down', 'left', 'right'].includes(button.dataset.key) && term.modes.applicationCursorKeysMode) {
-      data = data.replace('[', 'O');
-    }
-    input(data);
+    const name = button.dataset.key;
+    input(['up', 'down', 'left', 'right'].includes(name) ? cursorKey(name) : keys[name]);
   };
 });
 $('ctrl-key').addEventListener('pointerdown', event => event.preventDefault());
@@ -259,16 +287,90 @@ $('copy-button').onclick = async () => {
   try { await navigator.clipboard.writeText(selection); notice('Texto copiado.'); }
   catch { notice('Usa la opción Copiar del menú de selección del navegador.'); }
 };
+// Mando de desplazamiento. Dragging a finger over the text cannot work
+// everywhere: xterm.js 6 ships no touch scrolling at all, and a program that
+// turns on mouse reporting (Claude Code does) keeps every touch that lands on
+// the terminal. A control living outside the terminal works in every program.
+const pad = $('scroll-pad'), knob = $('scroll-knob');
+const PAD_DEADZONE = 5; // px around the centre that move nothing
+const MIN_RATE = 2;     // lines per second just outside the dead zone
+const MAX_RATE = 90;    // lines per second at full travel
+const HOLD_BOOST = 1.6; // extra speed once the knob is held away from centre
+const HOLD_RAMP = 900;  // ms taken to reach that extra speed
+let padPointer = null, padStart = 0, padTravel = 44, padOffset = 0;
+let padFrame = 0, padLast = 0, padHeldSince = 0, padDebt = 0;
+
+// One push has to move three different things. xterm scrolls its own buffer,
+// a program holding the mouse expects wheel notches, and a full-screen program
+// without the mouse only understands cursor and page keys.
+function scrollMode() {
+  if (term.buffer.active.type !== 'alternate') return 'buffer';
+  return term.modes.mouseTrackingMode === 'none' ? 'keys' : 'wheel';
+}
+function padSend(mode, forward, page) {
+  if (mode === 'buffer') { term.scrollLines(forward ? 1 : -1); return; }
+  if (mode === 'wheel') {
+    // SGR wheel report: button 65 moves towards the end of the text, 64 back.
+    const col = Math.max(1, Math.round(term.cols / 2)), row = Math.max(1, Math.round(term.rows / 2));
+    input(`\x1b[<${forward ? 65 : 64};${col};${row}M`);
+    return;
+  }
+  input(page ? (forward ? '\x1b[6~' : '\x1b[5~') : cursorKey(forward ? 'down' : 'up'));
+}
+function padTick(now) {
+  padFrame = requestAnimationFrame(padTick);
+  const seconds = Math.min(0.1, (now - padLast) / 1000); padLast = now;
+  if (!padOffset) { padDebt = 0; return; }
+  const mode = scrollMode();
+  if (mode !== 'buffer' && (!online || exited)) return;
+  const boost = 1 + (HOLD_BOOST - 1) * Math.min(1, (now - padHeldSince) / HOLD_RAMP);
+  const strength = Math.abs(padOffset);
+  const rate = (MIN_RATE + (MAX_RATE - MIN_RATE) * strength * strength) * boost;
+  const page = mode === 'keys' && rate > term.rows;
+  const unit = mode === 'wheel' ? 3 : page ? Math.max(1, term.rows - 2) : 1;
+  padDebt += rate * seconds;
+  let guard = 40;
+  while (padDebt >= unit && guard--) { padDebt -= unit; padSend(mode, padOffset > 0, page); }
+  if (mode === 'buffer' && padOffset < 0 && term.buffer.active.viewportY === 0) requestHistory();
+}
+function padSet(y) {
+  const travel = Math.max(-padTravel, Math.min(padTravel, y));
+  knob.style.transform = `translateY(${travel}px)`;
+  const reach = Math.max(1, padTravel - PAD_DEADZONE);
+  const size = Math.abs(travel) <= PAD_DEADZONE ? 0 : Math.min(1, (Math.abs(travel) - PAD_DEADZONE) / reach);
+  // Pushing the knob up moves the view towards the end of the text, the same
+  // direction a finger drag gives in any mobile application.
+  const next = travel < 0 ? size : -size;
+  if (Boolean(next) !== Boolean(padOffset)) padHeldSince = performance.now();
+  padOffset = next;
+}
+function padRelease(event) {
+  if (event.pointerId !== padPointer) return;
+  padPointer = null; delete pad.dataset.active;
+  padSet(0); padDebt = 0;
+  cancelAnimationFrame(padFrame); padFrame = 0;
+}
+pad.addEventListener('pointerdown', event => {
+  event.preventDefault();
+  if (!selected || padPointer !== null) return;
+  padPointer = event.pointerId; pad.setPointerCapture(padPointer);
+  padTravel = Math.max(20, (pad.clientHeight - knob.clientHeight) / 2 - 4);
+  padStart = event.clientY; padDebt = 0; padLast = performance.now(); padHeldSince = padLast;
+  pad.dataset.active = 'true'; padSet(0);
+  cancelAnimationFrame(padFrame); padFrame = requestAnimationFrame(padTick);
+});
+pad.addEventListener('pointermove', event => {
+  if (event.pointerId !== padPointer) return;
+  event.preventDefault(); padSet(event.clientY - padStart);
+});
+pad.addEventListener('pointerup', padRelease);
+pad.addEventListener('pointercancel', padRelease);
+
 const heartbeat = setInterval(() => { if (online) send({ type: 'ping' }); }, 10_000);
 window.addEventListener('pagehide', () => { clearTimeout(retryTimer); socket?.close(); });
-window.addEventListener('pageshow', event => { if (event.persisted && !locked && selected) choose(selected); });
-window.addEventListener('online', () => { if (!online && !locked && selected && !stopRetry) choose(selected); });
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !locked && selected && !stopRetry) {
-    // Mobile browsers may freeze sockets without firing close; reattach to the same PTY.
-    choose(selected);
-  }
-});
+window.addEventListener('pageshow', event => { if (event.persisted) probe(); });
+window.addEventListener('online', probe);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') probe(); });
 window.addEventListener('beforeunload', () => clearInterval(heartbeat));
 setFont(fontSize); viewport();
 unlock().catch(error => { if (!locked || $('login-view').hidden) { showLogin(); $('login-error').textContent = error.message; } });

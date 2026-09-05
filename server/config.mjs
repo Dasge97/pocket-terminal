@@ -28,6 +28,11 @@ export function validateConfig(input) {
     shellArgs: input.shellArgs ?? (process.platform === 'win32' ? ['-NoLogo'] : ['-l']),
     defaultCwd: input.defaultCwd || homedir(),
     maxSessions: 8,
+    scrollback: 3000,
+    // Reattaching happens every time the phone returns to the foreground, so the
+    // first snapshot carries the screen plus a short tail. The client asks for
+    // the rest only when the user scrolls past it.
+    snapshotScrollback: 500,
     authLifetimeMs: 12 * 60 * 60 * 1000,
     distPath: resolve(projectRoot, 'dist'),
   };
