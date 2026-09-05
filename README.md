@@ -14,12 +14,14 @@ El servidor se ejecuta en tu Windows con tu usuario. El móvil envía pulsacione
 - Campo auxiliar para escribir, pegar o usar el dictado del teclado del móvil.
 - Varias terminales, con nombre y carpeta inicial. Máximo: 8.
 - Reconexión a la misma sesión, conservando la pantalla y hasta 3.000 líneas de historial en memoria.
+- Mando de desplazamiento para mover el texto arriba y abajo con el pulgar, también dentro de Claude Code.
+- Explorador de carpetas para elegir dónde abrir una terminal sin teclear la ruta.
 - Contraseña, cookie HttpOnly, comprobación de origen y límite de intentos.
 - Panel de control con doble clic: estado de cada pieza y acciones para arreglarla.
 - Túnel temporal de Cloudflare, con contraseña nueva en cada arranque.
 - Bot de Telegram para encenderlo y apagarlo desde el móvil, con arranque automático al iniciar sesión en Windows.
 - Scripts de instalación, arranque e inicio automático para Windows.
-- Acceso tipo app desde la pantalla de inicio del móvil. Requiere conexión; no hay modo sin conexión.
+- Instalable en la pantalla de inicio del iPhone, con su icono. La terminal necesita conexión; sin ella se abre la app y avisa.
 
 **La persistencia cubre cerrar el navegador o perder cobertura.** Reiniciar el servidor, cerrar la sesión de Windows o apagar el PC termina las terminales. Bloquear la pantalla de Windows mantiene los procesos; suspender el ordenador pausa el acceso hasta que despierte. Los programas que se lancen de forma independiente pueden tener otro ciclo de vida.
 
@@ -145,6 +147,8 @@ Usa **Serve** para esta configuración privada. Tailscale **Funnel** tiene otra 
 |---|---|
 | Selector superior | Cambiar entre terminales |
 | `＋` | Crear una terminal con nombre y carpeta |
+| Explorar | Recorrer las carpetas del ordenador y elegir una, sin teclear la ruta |
+| Mando redondo | Deslizarlo arriba avanza hacia el final del texto; abajo retrocede. Cuanto más lejos del centro, más rápido |
 | `A−` / `A+` | Cambiar el tamaño de letra |
 | Teclado | Abrir o cerrar el teclado del teléfono |
 | Ctrl | Aplicar Ctrl a la siguiente letra o carácter compatible |
@@ -156,6 +160,10 @@ Usa **Serve** para esta configuración privada. Tailscale **Funnel** tiene otra 
 | Ajustes → Cerrar esta terminal | Terminar esa terminal, previa confirmación |
 
 **Insertar texto no añade Intro automáticamente**, pero un texto con saltos de línea puede ejecutar comandos, según el programa activo y su soporte de pegado entre delimitadores. Revísalo antes de insertarlo. No se guardan el texto auxiliar ni la salida de terminal en el almacenamiento del navegador; solo se recuerdan el tamaño de letra y el identificador de la última sesión.
+
+**El mando redondo elige solo cómo mover el texto.** Con PowerShell o Codex desplaza el historial que guarda la propia web. Claude Code se queda con la pantalla y con el ratón mientras funciona, así que ahí el mando le manda ruedas de ratón y es Claude Code quien mueve su conversación. Con `vim` o `less` manda Re Pág y Av Pág. No hay nada que configurar.
+
+Al volver a la app desde el móvil, la web comprueba si la conexión sigue viva antes de rehacerla, y conserva por dónde ibas leyendo. La primera carga trae la pantalla y 500 líneas; el resto del historial se pide solo al llegar al principio.
 
 Solo un dispositivo controla cada terminal a la vez. Si la abres desde otro, el anterior se desconecta para evitar cambios de tamaño y pulsaciones simultáneas. Puedes recuperarla desde **Ajustes → Volver a conectar**.
 
@@ -199,6 +207,8 @@ Esta aplicación da acceso a una **terminal completa con los permisos de tu usua
 - Contraseña con scrypt y sal aleatoria; tokens aleatorios, revocables y con caducidad de 12 horas.
 - Cookies HttpOnly, SameSite=Strict y Secure cuando se configura HTTPS.
 - Límite global de diez intentos de acceso por minuto, tamaños de entrada limitados y máximo de ocho terminales.
+- El explorador de carpetas solo devuelve nombres. No abre, no lee, no ejecuta ni cambia ningún archivo, y su único resultado es la carpeta donde arranca la terminal.
+- La copia sin conexión guarda la página y sus archivos compilados. No guarda respuestas de la API, salida de terminal ni la cookie de acceso.
 - Salida y pantalla solo en memoria; el servidor no registra las pulsaciones ni el historial. PowerShell, Claude y otras herramientas sí pueden guardar su propio historial habitual.
 - Sin scripts de terceros ni recursos remotos en la interfaz. Los archivos del proyecto y la configuración no se sirven como contenido web.
 - La configuración privada, certificados y dependencias se excluyen del repositorio.
@@ -233,6 +243,7 @@ Comprobación manual recomendada al instalar: abrir una terminal, ejecutar `clau
 | `scripts/runtime.mjs` | Arranque, parada y estado compartido |
 | `scripts/bot.mjs` | Bot de Telegram |
 | `scripts/` | Configuración y scripts para Windows |
+| `docs/` | Decisiones sobre las funciones del móvil |
 | `test/` | Pruebas de integración y seguridad |
 | `.github/workflows/ci.yml` | Verificación en Windows y Linux |
 

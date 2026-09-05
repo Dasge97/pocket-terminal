@@ -2,7 +2,7 @@
 
 Fecha del acuerdo: 5 de septiembre de 2026.
 
-Estado: **decidido, sin implementar**. No se ha tocado ningún archivo de código. En el momento de escribir este documento había otra sesión trabajando en el repositorio.
+Estado: **las cuatro funciones están implementadas**. Falta probar el mando de desplazamiento en un móvil real.
 
 Este documento recoge cuatro funciones aprobadas, lo que se ha descartado, y las mediciones técnicas que condicionan cómo hay que construirlas.
 
@@ -17,6 +17,7 @@ Este documento recoge cuatro funciones aprobadas, lo que se ha descartado, y las
 5. [Descartado](#5-descartado)
 6. [Mediciones técnicas](#6-mediciones-técnicas)
 7. [Orden de trabajo](#7-orden-de-trabajo)
+8. [Qué se ha implementado](#8-qué-se-ha-implementado)
 
 ---
 
@@ -223,3 +224,53 @@ Orden propuesto, sin objeción del usuario.
 3. **PWA instalable.** Son cambios pequeños e independientes del resto.
 
 Sobre el joystick, el usuario indicó que se harán pruebas antes de darlo por bueno.
+
+---
+
+## 8. Qué se ha implementado
+
+Las cuatro funciones están construidas y las pruebas pasan en verde. Cada una llegó en su propio commit.
+
+### Mando de desplazamiento
+
+Vive en `web/index.html`, `web/style.css` y `web/main.js`. Está flotando sobre la esquina inferior derecha de la terminal y se ve siempre que hay una terminal abierta.
+
+Valores elegidos, todos ajustables en la cabecera del bloque `Mando de desplazamiento` de `web/main.js`:
+
+- Zona muerta de 5 píxeles alrededor del centro.
+- De 2 líneas por segundo justo fuera de la zona muerta a 90 líneas por segundo con el mando a fondo.
+- Manteniéndolo desplazado, la velocidad sube un 60 % en 900 milisegundos.
+- El recorrido se calcula solo a partir del alto del mando, que se reduce cuando la pantalla es baja.
+
+Los tres modos funcionan como describe la sección 1. En pantalla alternativa sin ratón usa flechas cuando va despacio y Re Pág o Av Pág cuando va rápido, para que también se pueda leer con precisión en `less` o `vim`.
+
+**Lo propuesto y no aprobado no se ha hecho.** No hay toque en el centro para saltar al final, ni se puede mover el mando a la esquina izquierda.
+
+### Reinicio al volver a la app
+
+Al volver al primer plano la web ya no rehace la conexión a ciegas. Manda un `ping`, el servidor contesta `pong` fuera de la cola de trabajo de la terminal, y solo si la respuesta no llega en 2,5 segundos se rehace la conexión.
+
+Cuando toca rehacerla, la pantalla ya no se borra antes de tiempo. El contenido se sustituye cuando llega el snapshot, y se recupera por dónde ibas leyendo.
+
+El primer snapshot trae la pantalla y 500 líneas en lugar de 3.000. El servidor avisa con `hasMore` de que queda más. La web pide el resto con un mensaje `history` en cuanto el mando llega al principio del historial.
+
+### Explorador de carpetas
+
+`GET /api/browse` devuelve los nombres de una carpeta, las carpetas primero, más la lista de unidades del ordenador. El diálogo se abre desde el botón **Explorar**, junto al campo de la carpeta.
+
+Los archivos se ven pero no se pueden pulsar. El explorador nunca abre, lee, ejecuta ni cambia nada.
+
+### PWA
+
+Hay iconos PNG de 180, 192 y 512, más uno maskable de 512, dibujados a partir del mismo diseño que `icon.svg`. El de 180 es el que iOS necesita para poner un icono de verdad en la pantalla de inicio.
+
+El service worker guarda una copia de la página y de sus archivos compilados. Nunca toca `/api/` ni el WebSocket de la terminal, así que no guarda nada de tus sesiones.
+
+Para que el navegador acepte registrarlo hubo que añadir `worker-src 'self'` a la política de contenido, que empezaba por `default-src 'none'`. Los archivos de `/assets/` pasan a servirse como inmutables, porque su nombre lleva el hash del contenido.
+
+### Qué falta comprobar en el móvil
+
+- Que la dirección del mando es la que esperabas: hacia arriba avanza hacia el final del texto.
+- Que la velocidad y el tamaño del mando resultan cómodos con el pulgar.
+- Que el mando no tapa texto que necesites leer.
+- Que dentro de Claude Code el mando mueve la conversación como esperas.
