@@ -13,7 +13,7 @@ const securityHeaders = {
   'Cache-Control': 'no-store',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   // xterm positions cells and its textarea through inline styles, but scripts remain self-only.
-  'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+  'Content-Security-Policy': "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
 };
 
 function json(res, status, body, headers = {}) {
@@ -129,7 +129,13 @@ export function createApp(config) {
       try {
         if (!(await stat(path)).isFile()) throw new Error();
         const content = await readFile(path);
-        res.writeHead(200, { ...pageHeaders, 'Content-Type': types[extname(path)] || 'application/octet-stream', 'Content-Length': content.length });
+        res.writeHead(200, {
+          ...pageHeaders,
+          // Built assets carry a content hash in their name, so a cached copy is
+          // always the right one. Everything else must stay fresh.
+          'Cache-Control': pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-store',
+          'Content-Type': types[extname(path)] || 'application/octet-stream', 'Content-Length': content.length,
+        });
         res.end(req.method === 'HEAD' ? undefined : content);
       } catch { json(res, 404, { error: 'Archivo no encontrado. Ejecuta npm run build si aún no has compilado la web.' }); }
     } catch (error) {

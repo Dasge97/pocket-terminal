@@ -423,5 +423,8 @@ window.addEventListener('pageshow', event => { if (event.persisted) probe(); });
 window.addEventListener('online', probe);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') probe(); });
 window.addEventListener('beforeunload', () => clearInterval(heartbeat));
+// Keeps a copy of the page so the app opens instead of showing a network
+// error when there is no connection. The terminal still needs the server.
+navigator.serviceWorker?.register('/sw.js').catch(() => {});
 setFont(fontSize); viewport();
 unlock().catch(error => { if (!locked || $('login-view').hidden) { showLogin(); $('login-error').textContent = error.message; } });

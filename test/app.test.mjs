@@ -173,6 +173,33 @@ test('reattaching sends a trimmed snapshot, answers a ping and serves the full h
   assert.equal(f.app.sessions.items.get(s.id).exited, false);
 });
 
+test('the app installs as a PWA and keeps a copy of itself for offline starts', async t => {
+  const f = await fixture(t);
+  const page = await f.request('/');
+  const html = await page.text();
+  assert.equal(page.headers.get('cache-control'), 'no-store');
+  // Without worker-src the policy of default-src 'none' blocks the service worker.
+  assert.match(page.headers.get('content-security-policy'), /worker-src 'self'/);
+  // iOS ignores the manifest icons; without this PNG the home screen shows a screenshot.
+  assert.match(html, /rel="apple-touch-icon"/);
+  assert.match(html, /\/icon-180\.png/);
+
+  const worker = await f.request('/sw.js');
+  assert.equal(worker.status, 200);
+  assert.match(worker.headers.get('content-type'), /javascript/);
+
+  const manifest = await (await f.request('/manifest.webmanifest')).json();
+  const icons = manifest.icons.map(icon => icon.src);
+  assert.ok(icons.includes('/icon-192.png') && icons.includes('/icon-512.png'), 'Faltan los iconos PNG del manifest.');
+  assert.ok(manifest.icons.some(icon => icon.purpose === 'maskable'), 'Falta el icono maskable.');
+  for (const src of new Set(icons)) assert.equal((await f.request(src)).status, 200, `No se sirve el icono ${src}`);
+
+  // Built assets carry a content hash, so they can be kept for good.
+  const asset = html.match(/\/assets\/[\w.-]+\.js/)?.[0];
+  assert.ok(asset, 'No se encontró ningún archivo compilado en la página.');
+  assert.match((await f.request(asset)).headers.get('cache-control'), /immutable/);
+});
+
 test('the folder picker lists names only and refuses anything that is not a folder', async t => {
   const f = await fixture(t);
   assert.equal((await f.request('/api/browse')).status, 401);
