@@ -9,7 +9,7 @@ let fontSize = Math.max(12, Math.min(28, Number(readPref('pocket-font', 17)) || 
 const term = new Terminal({
   fontSize, lineHeight: 1.2, fontFamily: '"Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
   cursorBlink: true, scrollback: 3000, scrollOnUserInput: true, allowProposedApi: false,
-  theme: { background: '#10141c', foreground: '#e4eaf3', cursor: '#a3edb8', selectionBackground: '#46654f99', black: '#192230', red: '#ff929c', green: '#a3edb8', yellow: '#f2d58c', blue: '#8dbdff', magenta: '#d7acff', cyan: '#84d9df', white: '#e4eaf3', brightBlack: '#8e9eb7' },
+  theme: { background: '#10141c', foreground: '#e4eaf3', cursor: '#3bf76a', selectionBackground: '#2f7a4799', black: '#192230', red: '#ff929c', green: '#3bf76a', yellow: '#f2d58c', blue: '#8dbdff', magenta: '#d7acff', cyan: '#84d9df', white: '#e4eaf3', brightBlack: '#8e9eb7' },
 });
 const fit = new FitAddon(); term.loadAddon(fit);
 let opened = false, socket = null, selected = null, state = null;
