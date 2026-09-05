@@ -15,6 +15,9 @@ El servidor se ejecuta en tu Windows con tu usuario. El móvil envía pulsacione
 - Varias terminales, con nombre y carpeta inicial. Máximo: 8.
 - Reconexión a la misma sesión, conservando la pantalla y hasta 3.000 líneas de historial en memoria.
 - Contraseña, cookie HttpOnly, comprobación de origen y límite de intentos.
+- Panel de control con doble clic: estado de cada pieza y acciones para arreglarla.
+- Túnel temporal de Cloudflare, con contraseña nueva en cada arranque.
+- Bot de Telegram para encenderlo y apagarlo desde el móvil, con arranque automático al iniciar sesión en Windows.
 - Scripts de instalación, arranque e inicio automático para Windows.
 - Acceso tipo app desde la pantalla de inicio del móvil. Requiere conexión; no hay modo sin conexión.
 
@@ -46,15 +49,49 @@ El script instala dependencias, compila la web y pregunta:
 
 ## 2. Arrancar
 
-Desde la carpeta del proyecto:
+Haz doble clic en **`Pocket Terminal.cmd`**, dentro de la carpeta del proyecto. Se abre el panel de control: arriba el estado de cada pieza, debajo las acciones numeradas.
+
+La opción 1 abre un túnel de Cloudflare y arranca el servidor. La ventana te muestra la dirección y una contraseña nueva, y te las manda por Telegram si lo tienes configurado. La opción 2 arranca solo para este ordenador, sin túnel.
+
+Abre esa dirección, introduce la contraseña y pulsa **Nueva terminal**. La ruta del formulario corresponde a una carpeta de Windows, no del teléfono. También puedes cambiar de carpeta con `cd` dentro de PowerShell.
+
+**Cerrar el panel no para nada.** El servidor y el túnel siguen por su cuenta hasta que los pares desde el panel o desde el bot. El botón `Ctrl+C` de la web se envía únicamente al programa de la terminal seleccionada.
+
+El panel también sirve para arreglar lo que falle: arrancar y parar el bot, instalar o quitar el arranque automático, cambiar el token de Telegram, recompilar la web, ver el registro del bot y liberar el puerto si queda ocupado por un servidor anterior.
+
+Si prefieres la consola: `npm.cmd run panel` abre lo mismo, `npm.cmd run launch` arranca sin menú, y `npm.cmd start` levanta solo el servidor con la configuración guardada.
+
+**La contraseña cambia en cada arranque.** No hay que recordarla: llega por Telegram y aparece en el panel mientras el servicio está en marcha.
+
+## 2b. Túnel temporal y aviso por Telegram
+
+El túnel usa [cloudflared](https://github.com/cloudflare/cloudflared). Instálalo una vez, sin permisos de administrador:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start.ps1
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\cloudflared" | Out-Null
+Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "$env:LOCALAPPDATA\cloudflared\cloudflared.exe" -UseBasicParsing
 ```
 
-Abre [Pocket Terminal en este PC](http://localhost:3210), introduce tu contraseña y pulsa **Nueva terminal**. La ruta del formulario corresponde a una carpeta de Windows, no del teléfono. También puedes cambiar de carpeta con `cd` dentro de PowerShell.
+La dirección que da es distinta cada vez y deja de existir al cerrar el túnel. Cualquiera que la tenga llega a tu formulario de contraseña, así que ciérralo cuando no lo uses.
 
-Mantén abierto el proceso del servidor. Cerrar una pestaña del navegador no lo detiene. `Ctrl+C` en la consola **del servidor** lo detiene y cierra las terminales; el botón `Ctrl+C` de la web se envía únicamente al programa de la terminal seleccionada.
+Para que te llegue la dirección al móvil, crea un bot hablando con [@BotFather](https://t.me/BotFather) en Telegram, envíale `/newbot` y guarda el token. Después:
+
+```powershell
+npm.cmd run telegram -- <token del bot>
+```
+
+El comando espera a que escribas a tu bot y así averigua a qué chat responder. **Un bot de Telegram es público: cualquiera puede escribirle.** Pocket Terminal solo obedece al chat guardado y descarta el resto sin contestar, de modo que un desconocido no recibe respuesta alguna.
+
+Con el bot configurado puedes manejarlo desde el móvil sin tocar el ordenador:
+
+| Orden | Qué hace |
+|---|---|
+| `/arrancar` | Abre el túnel, enciende Pocket Terminal y te manda dirección y contraseña |
+| `/parar` | Cierra Pocket Terminal y el túnel |
+| `/estado` | Dice si está en marcha y repite los datos |
+| `/ayuda` | Lista de órdenes |
+
+Para dejar el bot escuchando desde que inicias sesión en Windows, usa la opción 6 del panel. Registra la tarea `PocketTerminalBot`, sin ventana, y la repite cada cinco minutos por si el proceso se cae. El bot comprueba al arrancar si ya hay otro y se retira, así que las repeticiones no acumulan copias. Su registro está en `.pocket-terminal\bot.log`.
 
 ### Claude Code, Git y SSH
 
@@ -70,9 +107,9 @@ Si solo usabas Claude como extensión, instala también su [CLI oficial para Win
 
 PowerShell hereda el usuario y las variables del proceso del servidor, y carga su perfil habitual. Git, claves SSH y herramientas disponibles para ese usuario funcionan en ese entorno. Reinicia Pocket Terminal si instalas herramientas o cambias el PATH. Las conexiones y ajustes exclusivos de VS Code no se importan. Para un servidor remoto, ejecuta `ssh usuario@servidor` y después Claude allí si lo tienes instalado en ese servidor.
 
-## 3. Entrar desde el móvil, también fuera de casa
+## 3. Alternativa al túnel: Tailscale
 
-La configuración recomendada utiliza **Tailscale en Windows y en el móvil** y **Tailscale Serve** para ofrecer la web por HTTPS dentro de tu red privada. No requiere abrir puertos en el router ni desplegar una web en otro servidor.
+El túnel de Cloudflare es cómodo pero publica una dirección en internet. Si vas a usarlo a diario, **Tailscale** es mejor: la dirección es fija y solo la alcanzan tus propios dispositivos. Usa **Tailscale Serve** para ofrecer la web por HTTPS dentro de tu red privada. No requiere abrir puertos en el router ni desplegar una web en otro servidor.
 
 1. Instala [Tailscale para Windows](https://tailscale.com/docs/install/windows) y la app de Tailscale en tu móvil. Inicia sesión en la misma cuenta y conecta ambos dispositivos.
 2. Con Pocket Terminal arrancado, ejecuta en PowerShell:
@@ -82,14 +119,13 @@ La configuración recomendada utiliza **Tailscale en Windows y en el móvil** y 
    ```
 
 3. Sigue las indicaciones de Tailscale para habilitar HTTPS si te lo pide. Copia la URL HTTPS que muestra, por ejemplo `https://tu-pc.tu-red.ts.net`.
-4. Detén Pocket Terminal y ejecuta:
+4. Detén Pocket Terminal y fija esa dirección como única de acceso:
 
    ```powershell
-   npm.cmd run setup
+   npm.cmd run origin -- https://tu-pc.tu-red.ts.net
    ```
 
-5. Conserva la carpeta, introduce esa **URL HTTPS sin barra final** y deja la contraseña vacía si quieres conservarla. Vuelve a arrancar Pocket Terminal.
-6. Con Tailscale activo en el móvil, abre esa URL y entra con la contraseña.
+5. Vuelve a arrancarlo con la opción 2 del panel, que no abre túnel. Con Tailscale activo en el móvil, abre esa dirección y entra con la contraseña que muestre el panel.
 
 Después de configurar HTTPS, usa esa misma URL también desde el PC: la autenticación está ligada a un único origen. `localhost` deja de servir como origen de inicio de sesión hasta que vuelvas a configurarlo.
 
@@ -117,33 +153,25 @@ Usa **Serve** para esta configuración privada. Tailscale **Funnel** tiene otra 
 
 Solo un dispositivo controla cada terminal a la vez. Si la abres desde otro, el anterior se desconecta para evitar cambios de tamaño y pulsaciones simultáneas. Puedes recuperarla desde **Ajustes → Volver a conectar**.
 
-## Inicio automático opcional
+## Inicio automático
 
-Después de completar la configuración:
+Hay dos tareas posibles, y normalmente solo interesa la primera.
+
+**`PocketTerminalBot`** deja el bot de Telegram escuchando desde que inicias sesión en Windows, sin ventana y sin arrancar nada por su cuenta. Se registra con la opción 6 del panel, o con `scripts\Enable-BotAutostart.ps1`. Se quita con la opción 7, o con `scripts\Disable-BotAutostart.ps1`. Es lo que permite encender Pocket Terminal desde el móvil sin tocar el ordenador.
+
+**`PocketTerminal`** arranca el servidor directamente al iniciar sesión, sin túnel ni contraseña nueva, usando la configuración guardada. Sirve si prefieres tenerlo siempre encendido dentro de tu red con Tailscale:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Enable-Autostart.ps1
 ```
 
-Crea una tarea llamada `PocketTerminal` para tu usuario, con permisos normales, **al iniciar sesión en Windows**. No guarda tu contraseña de Windows ni configura inicio de sesión automático. Puede ser necesario autorizar la creación de tareas según la política de tu equipo. El script no sustituye una tarea existente del mismo nombre.
+Ambas tareas se crean para tu usuario, con permisos normales. No guardan tu contraseña de Windows ni configuran inicio de sesión automático. Puede ser necesario autorizar la creación de tareas según la política de tu equipo.
 
-Para arrancar la tarea ahora, cierra primero el servidor manual y ejecuta:
-
-```powershell
-Start-ScheduledTask -TaskName PocketTerminal
-```
-
-Para quitarla y detener el servidor de esa tarea:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Disable-Autostart.ps1
-```
-
-Si cambias la ubicación del proyecto o reinstalas Node en otra ruta, vuelve a registrar la tarea. El PC debe permanecer encendido y sin suspensión para trabajar a distancia.
+Si cambias la ubicación del proyecto o reinstalas Node en otra ruta, vuelve a registrarlas. El PC debe permanecer encendido y sin suspensión para trabajar a distancia.
 
 ## Configuración local
 
-Se guarda en `.pocket-terminal/config.json`, excluido de Git. Usa `npm.cmd run setup` para modificar URL, carpeta o contraseña. También puedes editar el archivo con el servidor detenido:
+Se guarda en `.pocket-terminal/config.json`, excluido de Git. Usa `npm.cmd run setup` para modificar carpeta o contraseña, y `npm.cmd run origin -- <dirección>` para cambiar solo la dirección de acceso. También puedes editar el archivo con el servidor detenido:
 
 - `port`: puerto local, 3210 por defecto.
 - `publicOrigin`: único origen autorizado; HTTPS obligatorio salvo en localhost para pruebas.
@@ -152,7 +180,9 @@ Se guarda en `.pocket-terminal/config.json`, excluido de Git. Usa `npm.cmd run s
 - `shellArgs`: `['-NoLogo']` por defecto, escrito como una lista JSON con comillas dobles.
 - `passwordSalt` / `passwordHash`: gestionados por el asistente.
 
-Los argumentos se pasan como lista a la terminal, sin concatenar la carpeta en un comando. Para restablecer una contraseña olvidada, ejecuta el asistente desde Windows. Reiniciar el servidor invalida todas las cookies de acceso.
+Los argumentos se pasan como lista a la terminal, sin concatenar la carpeta en un comando. Reiniciar el servidor invalida todas las cookies de acceso.
+
+Junto al archivo de configuración, la misma carpeta guarda el estado de ejecución y los registros: `state.json` (procesos, dirección y contraseña en curso), `telegram.json` (token y chat del bot), `bot.log`, `server.log` y `tunnel.log`. El panel y el bot leen y escriben `state.json`, y por eso cualquiera de los dos puede parar lo que arrancó el otro. Toda la carpeta queda fuera de Git.
 
 ## Seguridad y alcance
 
@@ -190,8 +220,12 @@ Comprobación manual recomendada al instalar: abrir una terminal, ejecutar `clau
 
 | Ruta | Contenido |
 |---|---|
+| `Pocket Terminal.cmd` | Panel de control, para abrir con doble clic |
 | `web/` | Interfaz móvil y controles |
 | `server/` | HTTP, autenticación, WebSocket y PTY |
+| `scripts/panel.mjs` | Diagnóstico y menú de acciones |
+| `scripts/runtime.mjs` | Arranque, parada y estado compartido |
+| `scripts/bot.mjs` | Bot de Telegram |
 | `scripts/` | Configuración y scripts para Windows |
 | `test/` | Pruebas de integración y seguridad |
 | `.github/workflows/ci.yml` | Verificación en Windows y Linux |
