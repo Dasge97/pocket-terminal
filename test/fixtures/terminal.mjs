@@ -17,6 +17,11 @@ process.stdin.on('data', data => {
     else if (command === 'delayed') setTimeout(() => process.stdout.write('OFFLINE_RESULT\r\n'), 250);
     else if (command === 'query-later') setTimeout(() => process.stdout.write('\x1b[6n'), 250);
     else if (command === 'exit') process.exit(0);
+    else if (command.startsWith('burst ')) {
+      const count = Number(command.slice(6)) || 1000;
+      for (let i = 0; i < count; i++) process.stdout.write(`L${i} ${'z'.repeat(60)}\r\n`);
+      process.stdout.write('BURST_DONE\r\n');
+    }
     else process.stdout.write(`ECHO:${command}\r\n`);
   }
 });

@@ -14,6 +14,14 @@ export function dimensions(cols, rows) {
   return { cols, rows };
 }
 
+// node-pty 1.1.0 with `useConptyDll` only disposes its conout worker thread if
+// more output arrives after `kill()`, and never when the shell exits on its own.
+// The orphaned worker leaks per session and keeps the Node event loop alive, so
+// release it explicitly. Draining still happens inside node-pty's own dispose.
+export function releaseConoutWorker(processPty) {
+  try { processPty?._agent?._conoutSocketWorker?.dispose(); } catch {}
+}
+
 export class Sessions {
   constructor(config) { this.config = config; this.items = new Map(); this.creating = 0; }
   list() { return [...this.items.values()].map(s => this.info(s)); }
@@ -26,7 +34,8 @@ export class Sessions {
     this.creating++;
     let term;
     try {
-      cwd = await realpath(cwd);
+      try { cwd = await realpath(cwd); }
+      catch { throw new Error('No se encuentra esa carpeta en tu ordenador.'); }
       if (!(await stat(cwd)).isDirectory()) throw new Error('La ruta no es una carpeta.');
       term = new Terminal({ cols, rows, scrollback: 3000, allowProposedApi: true });
       const serializer = new SerializeAddon();
@@ -39,26 +48,39 @@ export class Sessions {
       const processPty = pty.spawn(this.config.shell, this.config.shellArgs, { cols, rows, cwd, env, name: 'xterm-256color', ...(process.platform === 'win32' ? { useConptyDll: true } : {}) });
       let resolveExit;
       const closed = new Promise(resolve => { resolveExit = resolve; });
-      const s = { id: randomUUID(), name: name.trim() || `Terminal ${this.items.size + 1}`, cwd, createdAt: new Date().toISOString(), term, serializer, pty: processPty, exited: false, client: null, queue: Promise.resolve(), pendingBytes: 0, closed };
+      const s = { id: randomUUID(), name: name.trim() || `Terminal ${this.items.size + 1}`, cwd, createdAt: new Date().toISOString(), term, serializer, pty: processPty, exited: false, client: null, queue: Promise.resolve(), pending: [], pendingChars: 0, flushTimer: null, closed };
       this.items.set(s.id, s);
       // Answer terminal queries while detached so interactive programs can start
       // without waiting for a browser. Attached clients answer their own queries.
       term.onData(data => {
         if (!s.exited && s.client?.readyState !== 1) { try { processPty.write(data); } catch {} }
       });
-      // Parsing is serialized so snapshots and live output cannot race or duplicate text.
-      processPty.onData(data => {
-        s.pendingBytes += Buffer.byteLength(data);
-        if (s.pendingBytes > 1024 * 1024) processPty.pause();
+      // ConPTY hands over output in ~37-byte pieces. Parsing and forwarding each
+      // piece on its own is orders of magnitude slower than doing it once per
+      // batch, so gather a frame's worth before touching the terminal or the
+      // socket. Parsing stays serialized so snapshots and live output cannot
+      // race or duplicate text.
+      s.flush = () => {
+        clearTimeout(s.flushTimer); s.flushTimer = null;
+        if (!s.pending.length) return;
+        const data = s.pending.join(''); s.pending = [];
         this.enqueue(s, async () => {
           await new Promise(resolve => term.write(data, resolve));
           this.send(s.client, { type: 'output', data });
-          s.pendingBytes -= Buffer.byteLength(data);
-          if (!s.exited && s.pendingBytes < 256 * 1024) processPty.resume();
+          s.pendingChars -= data.length;
+          if (!s.exited && s.pendingChars < 256 * 1024) processPty.resume();
         });
+      };
+      processPty.onData(data => {
+        s.pending.push(data);
+        s.pendingChars += data.length;
+        if (s.pendingChars > 1024 * 1024) processPty.pause();
+        if (!s.flushTimer) s.flushTimer = setTimeout(s.flush, 8);
       });
       processPty.onExit(({ exitCode }) => {
         s.exited = true; s.exitCode = exitCode;
+        releaseConoutWorker(processPty);
+        s.flush();
         this.enqueue(s, () => this.send(s.client, { type: 'exit', exitCode }));
         resolveExit();
       });
@@ -97,6 +119,7 @@ export class Sessions {
         } else if (message.type !== 'ping') throw new Error('Mensaje inválido');
       } catch { ws.close(1008, 'Mensaje inválido'); }
     });
+    s.flush?.();
     this.enqueue(s, () => {
       if (ws.readyState !== 1) return;
       if (s.client && s.client !== ws) s.client.close(4409, 'Sesión abierta en otro dispositivo');
@@ -111,13 +134,16 @@ export class Sessions {
     s.client?.close(4404, 'Sesión cerrada');
     if (!s.exited) {
       try { s.pty.kill(); } catch {}
+      releaseConoutWorker(s.pty);
       let timer;
       // ConPTY shutdown is asynchronous; wait before releasing the mirror/cwd.
       await Promise.race([s.closed, new Promise(resolve => { timer = setTimeout(resolve, 3000); })]);
       clearTimeout(timer);
     }
+    s.flush?.();
     await s.queue;
     s.disposed = true;
+    clearTimeout(s.flushTimer);
     s.term.dispose();
     return true;
   }

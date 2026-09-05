@@ -113,6 +113,37 @@ test('real PTY: input, resize, Ctrl+C, reconnect and output while disconnected',
   assert.equal(f.app.sessions.items.size, 0);
 });
 
+test('closing a live terminal releases the PTY instead of waiting for the shutdown timeout', async t => {
+  const f = await fixture(t); const cookie = await f.login();
+  const s = await f.app.sessions.create({});
+  const a = connect(f, s.id, cookie);
+  await a.until(m => text(m).includes('POCKET_READY'));
+  const started = Date.now();
+  assert.equal((await f.request(`/api/sessions/${s.id}`, { cookie, method: 'DELETE' })).status, 200);
+  const elapsed = Date.now() - started;
+  // node-pty on Windows only reports the exit once its conout worker is released.
+  // Hitting the 3s fallback means that release regressed and workers are leaking.
+  assert.ok(elapsed < 2500, `Cerrar la terminal tardó ${elapsed} ms: el PTY no notificó su salida.`);
+  assert.equal(f.app.sessions.items.size, 0);
+});
+
+test('a burst of output is batched instead of parsed piece by piece', async t => {
+  const f = await fixture(t); const cookie = await f.login();
+  const s = await f.app.sessions.create({});
+  const a = connect(f, s.id, cookie);
+  await a.until(m => text(m).includes('POCKET_READY'));
+  const started = Date.now();
+  a.write('burst 20000\r');
+  // The 8s deadline inside `until` is the real guard here: parsing ConPTY's
+  // ~37-byte pieces one at a time takes minutes for this much output.
+  await a.until(m => text(m).includes('BURST_DONE'));
+  const outputs = a.messages.filter(m => m.type === 'output').length;
+  assert.ok(outputs < 5000, `La salida llegó en ${outputs} mensajes para 20000 líneas: no se está agrupando.`);
+  assert.ok(text(a.messages).includes('L19999 '), 'Se perdieron líneas al agrupar la salida.');
+  assert.equal(f.app.sessions.items.get(s.id).pendingChars, 0);
+  console.log(`      (ráfaga de 20000 líneas: ${outputs} mensajes en ${Date.now() - started} ms)`);
+});
+
 test('logout revokes open WebSockets without killing the PTY', async t => {
   const f = await fixture(t); const cookie = await f.login(); const s = await f.app.sessions.create({});
   const a = connect(f, s.id, cookie); await a.until(m => m.some(x => x.type === 'snapshot'));
