@@ -171,7 +171,7 @@ El panel **se queda abierto** mientras lo usas, porque las flechas y Tab se puls
 | Selector del panel | Cambiar entre terminales |
 | `＋` | Crear una terminal con nombre y carpeta |
 | Explorar | Recorrer las carpetas del ordenador y elegir una, sin teclear la ruta |
-| Mando redondo | Deslizarlo arriba avanza hacia el final del texto; abajo retrocede. Cuanto más lejos del centro, más rápido |
+| Mando redondo | Deslizarlo arriba avanza hacia el final del texto; abajo retrocede. Cuanto más lejos del centro, más rápido. Es la única forma de desplazar: la barra de xterm está oculta para que no se pisen |
 | `A−` / `A+` | Cambiar el tamaño de letra |
 | Teclado | Abrir o cerrar el teclado del teléfono |
 | Ctrl | Aplicar Ctrl a la siguiente letra o carácter compatible |
