@@ -47,7 +47,7 @@ dialog{color:inherit;background:#181f2b;border:1px solid #3a4659;border-radius:2
 /* Con el teclado abierto el dialogo no cabe entero; el boton no puede quedarse fuera. */
 .dialog-footer{position:sticky;bottom:-24px;margin:16px -24px -24px;padding:12px 24px calc(12px + env(safe-area-inset-bottom));background:#181f2b;border-top:1px solid var(--border)}
 .dialog-footer>.primary{width:100%;margin:0}
-.run-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-top:8px;border-top:1px solid var(--border)}
+.run-row{display:grid;grid-template-columns:1fr;gap:6px;padding-top:8px;border-top:1px solid var(--border)}
 .run-row>button{min-height:40px;font-size:13px;font-weight:700;padding:6px 2px;color:#0c2113;background:var(--accent);border-color:var(--accent)}
 .run-row>button:hover:not(:disabled){background:#baf6ca}
 #to-bottom{position:absolute;z-index:13;right:max(4px,env(safe-area-inset-right));bottom:150px;min-height:34px;padding:6px 11px;font-size:12px;border-radius:17px;background:#202a39ee;border-color:#42536d}
