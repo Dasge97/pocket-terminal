@@ -136,11 +136,28 @@ function showLogin() {
   $('loading-view').hidden = true; $('workspace').hidden = true; $('login-view').hidden = false;
   $('password').value = ''; state = null;
 }
+// Cuándo viste por última vez cada terminal, para saber cuáles han escrito algo
+// mientras mirabas otra. Las terminales siguen corriendo aunque no las mires.
+const seen = new Map();
 function options() {
-  const select = $('session-select'); select.replaceChildren();
-  if (!state.sessions.length) select.append(new Option('Tus terminales', ''));
-  for (const s of state.sessions) select.append(new Option(`${s.name}${s.exited ? ' · finalizada' : ''}`, s.id));
-  select.value = selected ?? '';
+  const lista = $('session-list');
+  lista.replaceChildren();
+  for (const s of state.sessions) {
+    if (s.id === selected) seen.set(s.id, s.lastOutputAt);
+    const fresca = s.id !== selected && seen.has(s.id) && s.lastOutputAt > seen.get(s.id);
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.setAttribute('aria-current', String(s.id === selected));
+    if (fresca) boton.dataset.fresh = 'true';
+    const nombre = document.createElement('span');
+    nombre.className = 's-name'; nombre.textContent = s.name;
+    const nota = document.createElement('span');
+    nota.className = 's-note';
+    nota.textContent = s.exited ? 'finalizada' : fresca ? 'con novedades' : s.id === selected ? 'viendo' : 'en segundo plano';
+    boton.append(nombre, nota);
+    boton.onclick = () => { showSessions(false); if (s.id !== selected) choose(s.id); };
+    lista.append(boton);
+  }
 }
 async function refresh() { state = await api('/state'); options(); }
 function empty() {
@@ -159,7 +176,7 @@ async function unlock() {
 function choose(id) {
   disconnect(); selected = id; retryCount = 0; stopRetry = false;
   savePref('pocket-session', id); options();
-  $('empty-state').hidden = true; $('terminal').hidden = false; pad.hidden = !$('tools').hidden;
+  $('empty-state').hidden = true; $('terminal').hidden = false; pad.hidden = !$('tools').hidden || !$('sessions').hidden;
   if (!opened) { term.open($('terminal')); opened = true; }
   term.reset(); fit.fit(); connect();
 }
@@ -249,7 +266,6 @@ $('paste-password').onclick = async () => {
 };
 $('password').addEventListener('paste', () => { setTimeout(() => { if ($('password').value.trim()) submitLogin(); }, 0); });
 
-$('session-select').addEventListener('change', event => { if (event.target.value) choose(event.target.value); });
 
 // Carpetas recientes: abrir una terminal donde ya estuviste es lo más común, y
 // teclear una ruta de Windows en un móvil es lo más incómodo que hay.
@@ -288,7 +304,7 @@ $('new-form').addEventListener('submit', async event => {
     const cwd = $('session-cwd').value;
     const s = await api('/sessions', { method: 'POST', body: JSON.stringify({ cwd, cols: opened ? term.cols : 40, rows: opened ? term.rows : 24 }) });
     rememberCwd(s.cwd || cwd);
-    state.sessions.push(s); $('new-dialog').close(); choose(s.id);
+    state.sessions.push(s); $('new-dialog').close(); showSessions(false); choose(s.id);
   } catch (error) { $('new-error').textContent = error.message; }
   finally { $('create-button').disabled = false; }
 });
@@ -528,17 +544,31 @@ window.addEventListener('beforeunload', () => clearInterval(heartbeat));
 // abierto entre pulsaciones: las flechas y Tab se usan en tandas, y reabrirlo
 // para cada una sería peor que la barra fija que había antes.
 const tools = $('tools'), toolsTab = $('tools-tab');
+const sessions = $('sessions'), sessionsTab = $('sessions-tab');
 function showTools(open) {
   tools.hidden = !open;
   toolsTab.setAttribute('aria-expanded', String(open));
   toolsTab.setAttribute('aria-label', open ? 'Cerrar herramientas' : 'Abrir herramientas');
   toolsTab.firstElementChild.textContent = open ? '›' : '‹';
-  // El panel se superpone en lugar de encoger la terminal: redimensionarla
+  if (open && !sessions.hidden) showSessions(false);
+  // Los paneles se superponen en lugar de encoger la terminal: redimensionarla
   // haría que el programa en marcha repintase toda la pantalla cada vez.
-  pad.hidden = open || !selected;
+  pad.hidden = open || !sessions.hidden || !selected;
+}
+// Panel de terminales, en el borde contrario. Al abrirlo se pide el estado, que
+// es lo que dice cuáles han escrito algo mientras mirabas otra.
+function showSessions(open) {
+  sessions.hidden = !open;
+  sessionsTab.setAttribute('aria-expanded', String(open));
+  sessionsTab.setAttribute('aria-label', open ? 'Cerrar terminales' : 'Abrir terminales');
+  sessionsTab.firstElementChild.textContent = open ? '‹' : '›';
+  pad.hidden = open || !tools.hidden || !selected;
+  if (open) { if (!tools.hidden) showTools(false); refresh().catch(() => {}); }
 }
 toolsTab.addEventListener('pointerdown', event => event.preventDefault());
 toolsTab.onclick = () => showTools(tools.hidden);
+sessionsTab.addEventListener('pointerdown', event => event.preventDefault());
+sessionsTab.onclick = () => showSessions(sessions.hidden);
 
 // Atajos a comandos: escribir `claude` en un teclado de móvil, cada vez que se
 // abre una terminal, es de las cosas que más se repiten.
@@ -559,8 +589,11 @@ toBottom.onclick = () => { term.scrollToBottom(); checkBottom(); };
 term.onScroll(checkBottom);
 term.onRender(checkBottom);
 // Tocar la terminal la devuelve al frente; el panel no estorba más de la cuenta.
-$('terminal-area').addEventListener('pointerdown', () => { if (!tools.hidden) showTools(false); });
-showTools(false);
+$('terminal-area').addEventListener('pointerdown', () => {
+  if (!tools.hidden) showTools(false);
+  if (!sessions.hidden) showSessions(false);
+});
+showTools(false); showSessions(false);
 // Keeps a copy of the page so the app opens instead of showing a network
 // error when there is no connection. The terminal still needs the server.
 navigator.serviceWorker?.register('/sw.js').catch(() => {});

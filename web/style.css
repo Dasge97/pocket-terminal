@@ -20,9 +20,14 @@
 #scroll-knob{width:28px;height:28px;border-radius:0;background:#33455c;border:1px solid #5a728f;pointer-events:none;transition:transform .13s ease-out}
 #scroll-pad[data-active] #scroll-knob{background:var(--accent);border-color:var(--accent);transition:none}
 /* Tirador: lo unico que se ve encima de la terminal cuando el panel esta cerrado. */
-#tools-tab{position:absolute;z-index:30;right:0;top:50%;transform:translateY(-50%);width:20px;min-height:74px;padding:0;border-radius:0;border:1px solid #3a4a6180;border-right:0;background:#1b243288;color:var(--muted);font-size:13px;opacity:.4;transition:opacity .15s}
+#tools-tab,#sessions-tab{position:absolute;z-index:30;top:50%;transform:translateY(-50%);width:20px;min-height:74px;padding:0;border-radius:0;border:1px solid #3a4a6180;background:#1b243288;color:var(--muted);font-size:13px;opacity:.4;transition:opacity .15s}
+#tools-tab{right:0;border-right:0}
+#sessions-tab{left:0;border-left:0}
 #tools-tab[aria-expanded=true]{right:var(--tools-width);opacity:1;background:#202a39;color:#edf1f7}
-#tools{position:absolute;z-index:29;top:0;right:0;bottom:0;width:var(--tools-width);padding:0 0 env(safe-area-inset-bottom);background:#151b25;border-left:1px solid var(--border);overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column}
+#sessions-tab[aria-expanded=true]{left:var(--tools-width);opacity:1;background:#202a39;color:#edf1f7}
+#tools,#sessions{position:absolute;z-index:29;top:0;bottom:0;width:var(--tools-width);padding:0 0 env(safe-area-inset-bottom);background:#151b25;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column}
+#tools{right:0;border-left:1px solid var(--border)}
+#sessions{left:0;border-right:1px solid var(--border)}
 .tools-head{display:flex;align-items:center;gap:6px;padding:7px 8px;border-bottom:1px solid var(--border)}
 .tools-head .small-brand{font:bold 17px ui-monospace,monospace;color:var(--accent)}
 .session-heading{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -57,3 +62,13 @@ dialog{color:inherit;background:#181f2b;border:1px solid #3a4659;border-radius:0
 .run-row>button:hover:not(:disabled){background:#baf6ca}
 #to-bottom{position:absolute;z-index:13;right:max(4px,env(safe-area-inset-right));bottom:150px;min-height:34px;padding:6px 11px;font-size:12px;border-radius:0;background:#202a39ee;border-color:#42536d}
 .notice-action{display:block;margin-top:8px;min-height:36px;font-size:13px;padding:6px 12px}
+
+/* Una terminal por fila, con su nombre. La marcada es la que estás viendo. */
+.session-list{display:flex;flex-direction:column;gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+.session-list>button{border:0;background:#1a2331;text-align:left;min-height:44px;padding:6px 9px;font-size:13px;display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+.session-list>button[aria-current=true]{background:#22303f;box-shadow:inset 3px 0 0 var(--accent)}
+.session-list>button .s-name{font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-list>button .s-note{font-size:11px;color:var(--muted)}
+.session-list>button[data-fresh=true] .s-note{color:var(--accent)}
+.session-list:empty{display:none}
+#sessions .tools-head{flex-direction:column;align-items:flex-start;gap:2px}

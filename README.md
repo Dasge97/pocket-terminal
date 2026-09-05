@@ -207,9 +207,17 @@ Todo lo demás vive en un panel que se abre desde la pestaña del borde derecho.
 
 ### Varias terminales a la vez
 
-Hasta **ocho**, cada una en su carpeta y con el nombre de esa carpeta. Cambias entre ellas desde el selector del panel.
+Hasta **ocho**, cada una en su carpeta y con el nombre de esa carpeta. La pestaña del borde izquierdo abre la lista, con un botón por terminal.
 
-**Lo que ocurre en las que no estás mirando no se pierde.** El servidor mantiene cada terminal viva y guarda su pantalla y hasta 3.000 líneas de historial, aunque no haya nadie conectado. Al volver a una, aparece todo lo que ha pasado mientras tanto.
+<div align="center">
+<img src="docs/capturas/terminales.png" alt="Panel de terminales con una marcada como con novedades" width="270" />
+</div>
+
+**Corren de verdad en segundo plano.** El PowerShell de cada una sigue ejecutando aunque no la mires, y el servidor guarda su pantalla y hasta 3.000 líneas de historial aunque no haya nadie conectado.
+
+La lista dice en qué estado está cada una: **viendo** la que tienes delante, **en segundo plano** las demás, y **con novedades** en verde las que han escrito algo desde la última vez que las miraste. Así ves de un vistazo cuál te reclama.
+
+Comprobado dejando un comando corriendo en una terminal, cambiando a otra y volviendo: el resultado está, y lo que había antes del cambio también.
 
 Solo un dispositivo controla cada terminal a la vez. Si la abres desde otro sitio, el anterior se desconecta y puede recuperarla con un toque.
 

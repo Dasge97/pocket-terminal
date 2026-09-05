@@ -39,7 +39,8 @@ export class Sessions {
     for (let n = 2; n <= this.config.maxSessions + 1; n++) if (!usados.has(`${base} ${n}`)) return `${base} ${n}`;
     return base;
   }
-  info(s) { return { id: s.id, name: s.name, cwd: s.cwd, createdAt: s.createdAt, exited: s.exited, exitCode: s.exitCode, cols: s.term.cols, rows: s.term.rows }; }
+  // `lastOutputAt` deja ver cuáles han escrito algo mientras mirabas otra.
+  info(s) { return { id: s.id, name: s.name, cwd: s.cwd, createdAt: s.createdAt, exited: s.exited, exitCode: s.exitCode, cols: s.term.cols, rows: s.term.rows, lastOutputAt: s.lastOutputAt ?? s.createdAt }; }
   async create({ cwd = this.config.defaultCwd, cols = 80, rows = 24, name = '' } = {}) {
     if (this.items.size + this.creating >= this.config.maxSessions) throw new Error('Límite de 8 sesiones. Cierra una antes de crear otra.');
     dimensions(cols, rows);
@@ -86,6 +87,7 @@ export class Sessions {
         });
       };
       processPty.onData(data => {
+        s.lastOutputAt = new Date().toISOString();
         s.pending.push(data);
         s.pendingChars += data.length;
         if (s.pendingChars > 1024 * 1024) processPty.pause();

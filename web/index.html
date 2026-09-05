@@ -57,20 +57,26 @@
           <button id="to-bottom" hidden aria-label="Volver al final del texto">↓ Final</button>
         </div>
 
-        <!-- Todo lo que no es la terminal vive aquí, para que la pantalla sea
-             terminal y teclado y nada más mientras el panel está cerrado. -->
+        <!-- Dos paneles, uno por borde: las terminales a la izquierda y las
+             herramientas a la derecha. Con los dos cerrados la pantalla es
+             terminal y teclado y nada más. -->
+        <button id="sessions-tab" aria-expanded="false" aria-controls="sessions" aria-label="Abrir terminales">
+          <span aria-hidden="true">›</span>
+        </button>
+        <aside id="sessions" hidden>
+          <div class="tools-head">
+            <span class="small-brand" aria-hidden="true">›_</span>
+            <span id="connection-status" role="status">Conectando…</span>
+          </div>
+          <div id="session-list" class="session-list" aria-label="Terminales abiertas"></div>
+          <div class="run-row">
+            <button id="new-button">＋ Nueva terminal</button>
+          </div>
+        </aside>
         <button id="tools-tab" aria-expanded="false" aria-controls="tools" aria-label="Abrir herramientas">
           <span aria-hidden="true">‹</span>
         </button>
         <aside id="tools" hidden>
-          <div class="tools-head">
-            <span class="small-brand" aria-hidden="true">›_</span>
-            <div class="session-heading">
-              <label class="sr-only" for="session-select">Sesión de terminal</label>
-              <select id="session-select"><option value="">Tus terminales</option></select>
-              <span id="connection-status" role="status">Conectando…</span>
-            </div>
-          </div>
           <div class="keys-row" aria-label="Teclas especiales">
             <button id="ctrl-key" aria-pressed="false">Ctrl</button>
             <button data-key="escape">Esc</button>
@@ -89,8 +95,7 @@
             <button id="copy-button">Copiar</button>
             <button id="font-down" aria-label="Reducir letra">A−</button>
             <button id="font-up" aria-label="Aumentar letra">A+</button>
-            <button id="new-button" aria-label="Nueva terminal">＋ Nueva</button>
-            <button id="settings-button" aria-label="Ajustes">⋯ Ajustes</button>
+            <button id="settings-button" aria-label="Ajustes" class="wide-action">⋯ Ajustes</button>
           </div>
           <!-- Atajos a comandos, al final y a todo lo ancho: son los botones
                que más se pulsan, así que conviene que sean los más grandes. -->
