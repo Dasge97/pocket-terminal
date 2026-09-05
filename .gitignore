@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.pocket-terminal/
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+*.pem
+*.key
+*.pfx
+*.p12
+.DS_Store
+Thumbs.db

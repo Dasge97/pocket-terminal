@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#10141c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="description" content="Tu terminal de Windows, cómoda en el móvil." />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Pocket Terminal</title>
+  </head>
+  <body>
+    <main id="app">
+      <section id="login-view" class="gate" hidden>
+        <form id="login-form" class="login-card">
+          <div class="brand-icon" aria-hidden="true">›_</div>
+          <p class="eyebrow">POCKET TERMINAL</p>
+          <h1>Tu ordenador.<br />En tu bolsillo.</h1>
+          <p class="muted">Abre tu terminal y sigue donde lo dejaste.</p>
+          <label for="password">Contraseña</label>
+          <input id="password" type="password" autocomplete="current-password" required maxlength="1024" placeholder="Tu contraseña de acceso" />
+          <p id="login-error" class="error" role="alert"></p>
+          <button id="login-button" class="primary" type="submit">Entrar</button>
+          <p class="footnote">Acceso a tu equipo · Sesión privada</p>
+        </form>
+      </section>
+
+      <section id="workspace" hidden>
+        <header class="topbar">
+          <span class="small-brand" aria-label="Pocket Terminal">›_</span>
+          <div class="session-heading">
+            <label class="sr-only" for="session-select">Sesión de terminal</label>
+            <select id="session-select"><option value="">Tus terminales</option></select>
+            <span id="connection-status" role="status">Conectando…</span>
+          </div>
+          <button id="new-button" class="icon-button" aria-label="Nueva terminal" title="Nueva terminal">＋</button>
+          <button id="settings-button" class="icon-button" aria-label="Ajustes" title="Ajustes">⋯</button>
+        </header>
+        <div id="notice" role="status" hidden></div>
+        <div id="terminal-area">
+          <div id="empty-state">
+            <span class="empty-mark" aria-hidden="true">›_</span>
+            <h1>¿Por dónde seguimos?</h1>
+            <p>Abre PowerShell en la carpeta de tu proyecto.</p>
+            <button id="first-terminal" class="primary">Nueva terminal</button>
+            <p class="footnote">Después puedes ejecutar <code>claude</code>, <code>git</code> o <code>ssh</code>.</p>
+          </div>
+          <div id="terminal" aria-label="Terminal interactiva" hidden></div>
+        </div>
+        <footer id="controls">
+          <div class="keys-row" aria-label="Teclas especiales">
+            <button id="ctrl-key" aria-pressed="false">Ctrl</button>
+            <button data-key="escape">Esc</button>
+            <button data-key="tab">Tab</button>
+            <button data-key="interrupt" aria-label="Interrumpir con Control C">Ctrl+C</button>
+            <button data-key="up" aria-label="Flecha arriba">↑</button>
+            <button data-key="down" aria-label="Flecha abajo">↓</button>
+            <button data-key="left" aria-label="Flecha izquierda">←</button>
+            <button data-key="right" aria-label="Flecha derecha">→</button>
+            <button data-key="enter" aria-label="Intro">↵</button>
+          </div>
+          <div class="actions-row">
+            <button id="keyboard-button">Teclado</button>
+            <button id="compose-button">Escribir</button>
+            <button id="paste-button">Pegar</button>
+            <button id="copy-button">Copiar</button>
+            <span class="spacer"></span>
+            <button id="font-down" aria-label="Reducir letra">A−</button>
+            <button id="font-up" aria-label="Aumentar letra">A+</button>
+          </div>
+        </footer>
+      </section>
+      <div id="loading-view" class="gate"><p class="muted" role="status">Abriendo Pocket Terminal…</p></div>
+    </main>
+
+    <dialog id="new-dialog">
+      <form id="new-form">
+        <div class="dialog-heading"><h2>Nueva terminal</h2><button type="button" data-close="new-dialog" aria-label="Cerrar">×</button></div>
+        <label for="session-name">Nombre <span class="muted">(opcional)</span></label>
+        <input id="session-name" maxlength="60" placeholder="Mi proyecto" autocomplete="off" />
+        <label for="session-cwd">Carpeta de tu ordenador</label>
+        <input id="session-cwd" required maxlength="4096" placeholder="C:\Users\TuUsuario\proyectos" autocomplete="off" autocapitalize="off" spellcheck="false" />
+        <p class="muted">Se abrirá una terminal real en esta carpeta.</p>
+        <p id="new-error" class="error" role="alert"></p>
+        <button id="create-button" class="primary" type="submit">Abrir terminal</button>
+      </form>
+    </dialog>
+
+    <dialog id="settings-dialog">
+      <div class="dialog-heading"><h2>A tu medida</h2><button data-close="settings-dialog" aria-label="Cerrar">×</button></div>
+      <label for="font-size">Tamaño de letra <output id="font-value">17 px</output></label>
+      <input id="font-size" type="range" min="12" max="28" step="1" value="17" />
+      <p class="muted">La terminal ajusta sus columnas al espacio disponible.</p>
+      <button id="reconnect-button" class="wide">Volver a conectar</button>
+      <button id="fullscreen-button" class="wide">Pantalla completa</button>
+      <p class="footnote">En iPhone: Safari → Compartir → Añadir a pantalla de inicio.</p>
+      <hr />
+      <button id="end-button" class="wide danger">Cerrar esta terminal…</button>
+      <button id="logout-button" class="wide">Bloquear acceso</button>
+      <p class="footnote">Bloquear el acceso mantiene tus terminales trabajando.</p>
+    </dialog>
+
+    <dialog id="compose-dialog">
+      <form id="compose-form">
+        <div class="dialog-heading"><h2>Escribir en la terminal</h2><button type="button" data-close="compose-dialog" aria-label="Cerrar">×</button></div>
+        <label for="compose-text">Texto</label>
+        <textarea id="compose-text" rows="5" maxlength="16000" spellcheck="false" autocapitalize="off" placeholder="Escribe o pega aquí…"></textarea>
+        <p class="muted">Admite el dictado de tu teclado. Revisa el texto antes de insertarlo; los saltos de línea pueden ejecutar comandos.</p>
+        <button class="primary" type="submit">Insertar texto</button>
+      </form>
+    </dialog>
+
+    <dialog id="end-dialog">
+      <form id="end-form">
+        <h2>¿Cerrar esta terminal?</h2>
+        <p>Se terminará la sesión de PowerShell. Los programas de la sesión pueden detenerse y perder trabajo sin guardar.</p>
+        <div class="dialog-actions"><button type="button" data-close="end-dialog">Cancelar</button><button type="submit" class="danger">Cerrar terminal</button></div>
+      </form>
+    </dialog>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

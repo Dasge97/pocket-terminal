@@ -1,0 +1,24 @@
+{
+  "name": "pocket-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tu terminal de Windows, cómoda en el móvil.",
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "build": "vite build",
+    "start": "node server/index.mjs",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "check": "node --check server/index.mjs && node --check server/app.mjs && node --check server/sessions.mjs && node --check web/main.js"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/addon-serialize": "0.14.0",
+    "@xterm/headless": "6.0.0",
+    "@xterm/xterm": "6.0.0",
+    "node-pty": "1.1.0",
+    "ws": "8.21.3"
+  },
+  "devDependencies": { "vite": "8.2.2" }
+}
