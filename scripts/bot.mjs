@@ -1,6 +1,6 @@
 import { appendFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
+import { startControlServer } from './control.mjs';
 import { announce, botLockPort, botLogPath, configPort, readTelegram, say, startService, status, stopService, telegramCall, writeBotPid } from './runtime.mjs';
 
 // Started by the scheduled task there is no console to read, so keep a file.
@@ -14,21 +14,18 @@ const log = message => {
 };
 
 // The scheduled task retries every few minutes so a crashed bot comes back on
-// its own. Holding a local port is the lock that keeps the retries from piling
-// up extra copies, and it disappears by itself if the process dies.
+// its own. The control panel's port doubles as the single-instance lock: if it
+// is already taken another bot is alive, and it frees itself if that one dies.
 const port = await configPort();
-const lock = createServer();
-const locked = await new Promise(done => {
-  lock.once('error', () => done(false));
-  lock.once('listening', () => done(true));
-  lock.listen(botLockPort(port), '127.0.0.1');
+const control = await startControlServer(botLockPort(port), {
+  onStopBot: () => { log('parado desde el panel'); process.exit(0); },
 });
-if (!locked) {
+if (!control) {
   log('ya hay otro vigilante escuchando; me retiro');
   process.exit(0);
 }
-lock.unref();
 await writeBotPid();
+log(`panel de control en ${control.url}`);
 
 // Anyone can message a Telegram bot; only the chat id saved by `npm run
 // telegram` is obeyed. Everything else is dropped without a reply, so a

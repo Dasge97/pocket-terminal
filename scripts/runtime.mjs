@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { open, readFile, writeFile, rm, stat, mkdir } from 'node:fs/promises';
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { hashPassword } from '../server/auth.mjs';
@@ -15,6 +15,7 @@ export const serverLogPath = resolve(dataDir, 'server.log');
 export const tunnelLogPath = resolve(dataDir, 'tunnel.log');
 export const botPidPath = resolve(dataDir, 'bot.json');
 const tunnelsPath = resolve(dataDir, 'tunnels.json');
+const controlPath = resolve(dataDir, 'control.json');
 export const INSTALL_CLOUDFLARED = 'No encuentro cloudflared. Instálalo con:\n\n  New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\\cloudflared"\n  Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "$env:LOCALAPPDATA\\cloudflared\\cloudflared.exe" -UseBasicParsing';
 
 // Ambiguous glyphs are painful to retype on a phone keyboard.
@@ -23,7 +24,8 @@ export const newPassword = () => Array.from({ length: 24 }, () => ALPHABET[rando
 
 export async function readConfig() { return JSON.parse(await readFile(configPath, 'utf8')); }
 export async function configPort() { try { return (await readConfig()).port ?? 3210; } catch { return 3210; } }
-// One extra port next to the server acts as the single-instance lock for the bot.
+// One extra port next to the server: it serves the control panel and, by being
+// bound at all, acts as the single-instance lock for the bot.
 export const botLockPort = port => port + 1;
 
 /* ---------- estado compartido entre el panel y el bot ---------- */
@@ -36,6 +38,20 @@ async function writeState(state) {
   await writeFile(statePath, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
 }
 async function clearState() { await rm(statePath, { force: true }); }
+
+// The control panel is served on the loopback address only, but any web page
+// the user visits could still POST to it. A token that only the launcher knows
+// keeps those requests out: a foreign page can neither read it nor set the
+// header that carries it.
+export async function writeControlToken() {
+  const token = randomBytes(24).toString('hex');
+  await mkdir(dataDir, { recursive: true, mode: 0o700 });
+  await writeFile(controlPath, JSON.stringify({ token }), { mode: 0o600 });
+  return token;
+}
+export async function readControlToken() {
+  try { return JSON.parse(await readFile(controlPath, 'utf8')).token || null; } catch { return null; }
+}
 
 export async function writeBotPid() {
   await mkdir(dataDir, { recursive: true, mode: 0o700 });

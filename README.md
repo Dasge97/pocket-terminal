@@ -49,17 +49,23 @@ El script instala dependencias, compila la web y pregunta:
 
 ## 2. Arrancar
 
-Haz doble clic en **`Pocket Terminal.cmd`**, dentro de la carpeta del proyecto. Se abre el panel de control: arriba el estado de cada pieza, debajo las acciones numeradas.
+Haz doble clic en **`Pocket Terminal.cmd`**, dentro de la carpeta del proyecto. Se abre el panel de control en tu navegador: arriba el estado de cada pieza, debajo los botones. Si el bot no estaba en marcha, el icono lo arranca antes de abrir la página.
 
-La opción 1 abre un túnel de Cloudflare y arranca el servidor. La ventana te muestra la dirección y una contraseña nueva, y te las manda por Telegram si lo tienes configurado. La opción 2 arranca solo para este ordenador, sin túnel.
+**Arrancar con túnel** abre un túnel de Cloudflare y enciende el servidor. El panel te muestra la dirección y una contraseña nueva, y te las manda por Telegram si lo tienes configurado. **Arrancar solo aquí** enciende el servidor sin túnel, accesible únicamente desde este ordenador.
 
 Abre esa dirección, introduce la contraseña y pulsa **Nueva terminal**. La ruta del formulario corresponde a una carpeta de Windows, no del teléfono. También puedes cambiar de carpeta con `cd` dentro de PowerShell.
 
 **Cerrar el panel no para nada.** El servidor y el túnel siguen por su cuenta hasta que los pares desde el panel o desde el bot. El botón `Ctrl+C` de la web se envía únicamente al programa de la terminal seleccionada.
 
-El panel también sirve para arreglar lo que falle: arrancar y parar el bot, instalar o quitar el arranque automático, cambiar el token de Telegram, recompilar la web, ver el registro del bot y liberar el puerto si queda ocupado por un servidor anterior.
+El panel también sirve para arreglar lo que falle: parar el bot, instalar o quitar el arranque automático, recompilar la web, ver el registro del bot, liberar el puerto si queda ocupado por un servidor anterior y cerrar túneles que se hayan quedado abiertos.
 
-Si prefieres la consola: `npm.cmd run panel` abre lo mismo, `npm.cmd run launch` arranca sin menú, y `npm.cmd start` levanta solo el servidor con la configuración guardada.
+### Cómo está protegido el panel
+
+Lo sirve el proceso del bot, no el servidor de Pocket Terminal. Va así a propósito: el panel sirve para arrancar el servidor, de modo que no puede depender de que el servidor funcione.
+
+Escucha en `127.0.0.1` y en el puerto siguiente al del servidor, el 3211 por defecto. El túnel apunta al 3210, así que el panel nunca sale a internet. Además rechaza las peticiones cuyo `Host` no sea `127.0.0.1` ni `localhost`, y toda acción exige una clave que se genera al arrancar el bot: el icono la pasa en la dirección al abrir el navegador. Una página web cualquiera que intente mandar órdenes al puerto no conoce esa clave, y sin cabeceras CORS tampoco puede leer las respuestas.
+
+Si prefieres la consola: `npm.cmd run panel` abre un panel equivalente en modo texto, `npm.cmd run launch` arranca sin menú, y `npm.cmd start` levanta solo el servidor con la configuración guardada. El icono cae al panel de consola por su cuenta si no consigue abrir el navegador.
 
 **La contraseña cambia en cada arranque.** No hay que recordarla: llega por Telegram y aparece en el panel mientras el servicio está en marcha.
 

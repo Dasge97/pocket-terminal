@@ -11,5 +11,9 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-node scripts\panel.mjs
-if errorlevel 1 pause
+node scripts\open-panel.mjs
+if errorlevel 1 (
+  echo Abriendo el panel de consola como alternativa...
+  node scripts\panel.mjs
+  pause
+)

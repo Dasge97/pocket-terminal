@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pocket Terminal · panel</title>
+<style>
+:root{color-scheme:dark;--bg:#10141c;--panel:#181f2b;--muted:#a0aec3;--accent:#a3edb8;--border:#2c3749;--bad:#ffb3b3;--warn:#ffc894}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#edf1f7;font:15px/1.5 Inter,ui-sans-serif,system-ui,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:22px;letter-spacing:-.02em;margin:0 0 2px}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);font-size:13px;margin:0 0 22px}
+section{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:14px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px;font-weight:600}
+.row{display:flex;align-items:baseline;gap:10px;padding:5px 0;font-size:14px}
+.dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:#55617a;position:relative;top:-1px}
+.ok .dot{background:var(--accent)}.off .dot{background:#55617a}.bad .dot{background:var(--bad)}
+.row b{font-weight:600}
+.row .val{color:var(--muted);margin-left:auto;text-align:right;word-break:break-all}
+.alert{background:#3a2530;border:1px solid #6d3f4d;color:var(--warn);border-radius:10px;padding:10px 12px;margin:10px 0 0;font-size:13px}
+.link{display:block;margin:12px 0 0;padding:12px 14px;background:#101722;border:1px solid var(--border);border-radius:10px}
+.link small{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+.link code{font:14px ui-monospace,Consolas,monospace;color:var(--accent);word-break:break-all}
+.link a{color:var(--accent)}
+.copy{margin-left:8px;font-size:12px;padding:3px 8px;min-height:0}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit;color:inherit;background:#202a39;border:1px solid var(--border);border-radius:9px;padding:9px 13px;cursor:pointer;min-height:40px}
+button:hover:not(:disabled){background:#2c3a4d}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0c2113;font-weight:700}
+button.primary:hover:not(:disabled){background:#baf6ca}
+button.danger{color:var(--bad)}
+#msg{position:sticky;top:0;z-index:2;margin:0 0 14px;padding:11px 14px;border-radius:10px;background:#273448;border:1px solid #40506a;font-size:14px}
+#msg.err{background:#3a2530;border-color:#6d3f4d;color:var(--bad)}
+#msg[hidden]{display:none}
+pre{background:#0d1219;border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto;max-height:320px;font:12px/1.5 ui-monospace,Consolas,monospace;color:#c8d3e4;margin:12px 0 0}
+.hint{color:var(--muted);font-size:12px;margin:10px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <h1><span>›_</span> Pocket Terminal</h1>
+  <p class="sub">Panel de control. Solo accesible desde este ordenador.</p>
+  <div id="msg" hidden role="status"></div>
+
+  <section>
+    <h2>Estado</h2>
+    <div id="estado"></div>
+    <div id="avisos"></div>
+    <div id="acceso"></div>
+  </section>
+
+  <section>
+    <h2>Servicio</h2>
+    <div class="acts" id="servicio"></div>
+  </section>
+
+  <section>
+    <h2>Bot de Telegram y arranque automático</h2>
+    <div class="acts" id="bot"></div>
+    <p class="hint">Parar el bot cierra también este panel, porque es el bot quien lo sirve.</p>
+  </section>
+
+  <section>
+    <h2>Mantenimiento</h2>
+    <div class="acts" id="mant"></div>
+    <pre id="log" hidden></pre>
+  </section>
+</main>
+
+<script>
+const token = new URLSearchParams(location.search).get('k') || '';
+if (token) history.replaceState(null, '', location.pathname);
+let estado = null, ocupado = false;
+
+const $ = id => document.getElementById(id);
+function aviso(texto, error) {
+  const caja = $('msg');
+  caja.textContent = texto;
+  caja.classList.toggle('err', Boolean(error));
+  caja.hidden = !texto;
+}
+async function pedir(ruta, cuerpo) {
+  let res;
+  try {
+    res = await fetch(ruta, {
+      method: cuerpo === undefined ? 'GET' : 'POST',
+      headers: { 'X-Control-Token': token, ...(cuerpo === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+    });
+  } catch {
+    // El bot es quien sirve esta página, así que un fallo de red significa que
+    // se ha parado. Pocket Terminal sigue por su cuenta si estaba en marcha.
+    throw new Error('El bot se ha parado, así que este panel ya no responde. Vuelve a abrir Pocket Terminal.cmd.');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || 'No se pudo completar la operación.');
+  return body;
+}
+async function accion(nombre, cuerpo = {}, textoOcupado = 'Trabajando…') {
+  if (ocupado) return;
+  ocupado = true; pintar(); aviso(textoOcupado, false);
+  try {
+    const body = await pedir('/api/' + nombre, cuerpo);
+    if (body.status) estado = body.status;
+    if (body.log !== undefined) { $('log').textContent = body.log; $('log').hidden = false; }
+    aviso(body.error || body.message || 'Hecho.', Boolean(body.error));
+  } catch (error) { aviso(error.message, true); }
+  finally { ocupado = false; pintar(); }
+}
+async function refrescar() {
+  try { estado = await pedir('/api/status'); pintar(); }
+  catch (error) { aviso(error.message, true); }
+}
+
+function fila(clase, nombre, valor) {
+  return `<div class="row ${clase}"><span class="dot"></span><b>${nombre}</b><span class="val">${valor}</span></div>`;
+}
+function boton(id, texto, clase = '') {
+  return `<button data-do="${id}" class="${clase}"${ocupado ? ' disabled' : ''}>${texto}</button>`;
+}
+
+function pintar() {
+  if (!estado) return;
+  const s = estado;
+  $('estado').innerHTML = [
+    fila(s.server.running ? 'ok' : 'off', 'Pocket Terminal', s.server.running ? `en marcha · proceso ${s.server.pid}` : 'parado'),
+    fila(s.tunnel.running ? 'ok' : 'off', 'Túnel a internet', s.tunnel.running ? `abierto · proceso ${s.tunnel.pid}` : (s.server.running ? 'sin túnel, solo este ordenador' : 'cerrado')),
+    fila(s.bot.running ? 'ok' : 'off', 'Bot de Telegram', s.bot.running ? `escuchando · proceso ${s.bot.pid ?? '?'}` : 'parado'),
+    fila(s.task === 'registrada' ? 'ok' : 'bad', 'Arranque automático', s.task),
+    fila(s.cloudflared ? 'ok' : 'bad', 'cloudflared', s.cloudflared ? 'instalado' : 'no instalado'),
+    fila(s.telegram ? 'ok' : 'bad', 'Telegram', s.telegram ? `chat ${s.telegram.chatId}` : 'sin configurar'),
+    fila(s.web ? 'ok' : 'bad', 'Web compilada', s.web ? 'sí' : 'no'),
+    fila('off', 'Node', `${s.node} · puerto ${s.port}`),
+  ].join('');
+
+  const avisos = [];
+  if (s.orphan) avisos.push(`El puerto ${s.port} lo ocupa el proceso ${s.orphan}, que no he arrancado yo. Usa «Parar» para liberarlo.`);
+  if (s.strayTunnels?.length) avisos.push(`Hay ${s.strayTunnels.length} túnel(es) abiertos sin servidor detrás: ${s.strayTunnels.join(', ')}. Mantienen una dirección pública viva.`);
+  $('avisos').innerHTML = avisos.map(t => `<p class="alert">${t}</p>`).join('');
+
+  $('acceso').innerHTML = s.server.running
+    ? `<div class="link"><small>Dirección</small><code><a href="${s.url}" target="_blank" rel="noreferrer">${s.url}</a></code></div>
+       <div class="link"><small>Contraseña</small><code id="pass">${s.password}</code><button class="copy" data-do="copiar">Copiar</button></div>`
+    : '';
+
+  $('servicio').innerHTML = s.server.running
+    ? boton('stop', 'Parar', 'danger') + boton('restart', 'Reiniciar con contraseña nueva') + boton('announce', 'Reenviar por Telegram') + boton('abrir', 'Abrir en el navegador', 'primary')
+    : boton('start', 'Arrancar con túnel', 'primary') + boton('startLocal', 'Arrancar solo aquí');
+
+  $('bot').innerHTML =
+    (s.task === 'registrada' ? boton('autostartOff', 'Quitar arranque automático') : boton('autostartOn', 'Instalar arranque automático', 'primary'))
+    + boton('pararBot', 'Parar el bot', 'danger');
+
+  $('mant').innerHTML = boton('build', 'Recompilar la web') + boton('log', 'Ver registro del bot')
+    + (s.strayTunnels?.length ? boton('clearTunnels', 'Cerrar túneles sueltos', 'danger') : '');
+}
+
+const ordenes = {
+  start: () => accion('start', { localOnly: false }, 'Abriendo el túnel y arrancando…'),
+  startLocal: () => accion('start', { localOnly: true }, 'Arrancando…'),
+  stop: () => accion('stop', {}, 'Parando…'),
+  restart: () => accion('restart', { localOnly: estado?.localOnly ?? false }, 'Reiniciando…'),
+  announce: () => accion('announce', {}, 'Enviando…'),
+  autostartOn: () => accion('autostart', { enable: true }, 'Registrando la tarea…'),
+  autostartOff: () => accion('autostart', { enable: false }, 'Quitando la tarea…'),
+  build: () => accion('build', {}, 'Compilando…'),
+  log: () => accion('log', {}, 'Leyendo el registro…'),
+  clearTunnels: () => accion('clearTunnels', {}, 'Cerrando…'),
+  abrir: () => { if (estado?.url) window.open(estado.url, '_blank', 'noreferrer'); },
+  pararBot: async () => {
+    if (!confirm('Parar el bot cierra este panel y ya no podrás encender Pocket Terminal desde Telegram. ¿Seguir?')) return;
+    aviso('Parando el bot. Este panel dejará de responder.', false);
+    try { await pedir('/api/stopBot', {}); } catch {}
+  },
+  copiar: async () => {
+    try { await navigator.clipboard.writeText(estado.password); aviso('Contraseña copiada.', false); }
+    catch { aviso('El navegador no ha dejado copiar. Selecciónala a mano.', true); }
+  },
+};
+
+document.addEventListener('click', event => {
+  const orden = event.target.closest('[data-do]')?.dataset.do;
+  if (orden && ordenes[orden]) ordenes[orden]();
+});
+refrescar();
+setInterval(() => { if (!ocupado) refrescar(); }, 5000);
+</script>
+</body>
+</html>
