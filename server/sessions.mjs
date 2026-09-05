@@ -34,8 +34,12 @@ export class Sessions {
       const env = Object.fromEntries(Object.entries(process.env).filter(([, value]) => typeof value === 'string'));
       env.TERM = 'xterm-256color';
       env.COLORTERM = 'truecolor';
-      const processPty = pty.spawn(this.config.shell, this.config.shellArgs, { cols, rows, cwd, env, name: 'xterm-256color' });
-      const s = { id: randomUUID(), name: name.trim() || `Terminal ${this.items.size + 1}`, cwd, createdAt: new Date().toISOString(), term, serializer, pty: processPty, exited: false, client: null, queue: Promise.resolve(), pendingBytes: 0 };
+      // Ship the same ConPTY implementation across Windows versions. The OS
+      // implementation's process-list teardown can race early session closure.
+      const processPty = pty.spawn(this.config.shell, this.config.shellArgs, { cols, rows, cwd, env, name: 'xterm-256color', ...(process.platform === 'win32' ? { useConptyDll: true } : {}) });
+      let resolveExit;
+      const closed = new Promise(resolve => { resolveExit = resolve; });
+      const s = { id: randomUUID(), name: name.trim() || `Terminal ${this.items.size + 1}`, cwd, createdAt: new Date().toISOString(), term, serializer, pty: processPty, exited: false, client: null, queue: Promise.resolve(), pendingBytes: 0, closed };
       this.items.set(s.id, s);
       // Answer terminal queries while detached so interactive programs can start
       // without waiting for a browser. Attached clients answer their own queries.
@@ -56,6 +60,7 @@ export class Sessions {
       processPty.onExit(({ exitCode }) => {
         s.exited = true; s.exitCode = exitCode;
         this.enqueue(s, () => this.send(s.client, { type: 'exit', exitCode }));
+        resolveExit();
       });
       return this.info(s);
     } catch (error) { term?.dispose(); throw error; }
@@ -104,7 +109,13 @@ export class Sessions {
     if (!s) return false;
     this.items.delete(id);
     s.client?.close(4404, 'Sesión cerrada');
-    if (!s.exited) { try { s.pty.kill(); } catch {} }
+    if (!s.exited) {
+      try { s.pty.kill(); } catch {}
+      let timer;
+      // ConPTY shutdown is asynchronous; wait before releasing the mirror/cwd.
+      await Promise.race([s.closed, new Promise(resolve => { timer = setTimeout(resolve, 3000); })]);
+      clearTimeout(timer);
+    }
     await s.queue;
     s.disposed = true;
     s.term.dispose();

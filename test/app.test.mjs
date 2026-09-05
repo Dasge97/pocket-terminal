@@ -22,7 +22,7 @@ async function fixture(t) {
   const config = validateConfig({ port, publicOrigin: origin, defaultCwd: cwd, shell: process.execPath, shellArgs: [resolve('test/fixtures/terminal.mjs')], ...await hashPassword('test-password-only') });
   const app = createApp(config);
   app.server.listen(port, '127.0.0.1'); await once(app.server, 'listening');
-  t.after(async () => { await app.close(); await rm(cwd, { recursive: true, force: true }); });
+  t.after(async () => { await app.close(); await rm(cwd, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); });
   const request = (path, { cookie, origin: requestOrigin = origin, ...options } = {}) => fetch(`${origin}${path}`, {
     ...options, headers: { Origin: requestOrigin, 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...options.headers },
   });
