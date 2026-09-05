@@ -82,8 +82,13 @@
             <button data-key="right" aria-label="Flecha derecha">→</button>
             <button data-key="enter" aria-label="Intro" class="wide-key">↵</button>
           </div>
+          <!-- Atajos a comandos, en su propia fila justo debajo de las teclas:
+               son lo primero que se hace al abrir una terminal. -->
+          <div class="run-row" aria-label="Atajos">
+            <button id="run-claude" data-run="claude">claude</button>
+            <button id="run-claude-resume" data-run="claude --resume">Sesiones</button>
+          </div>
           <div class="actions-row">
-            <button id="run-claude" class="wide-action" data-run="claude">Lanzar claude</button>
             <button id="keyboard-button">Teclado</button>
             <button id="compose-button">Escribir</button>
             <button id="paste-button">Pegar</button>

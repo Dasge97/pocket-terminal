@@ -173,7 +173,8 @@ El panel **se queda abierto** mientras lo usas, porque las flechas y Tab se puls
 | Pestaña del borde derecho | Abrir y cerrar el panel de herramientas |
 | Selector del panel | Cambiar entre terminales |
 | `＋ Nueva` | Crear una terminal eligiendo la carpeta. Se llama como la carpeta y ofrece las cinco últimas que usaste |
-| Lanzar claude | Escribe `claude` y lo ejecuta, sin teclear en el móvil |
+| claude | Escribe `claude` y lo ejecuta, sin teclear en el móvil |
+| Sesiones | Ejecuta `claude --resume`, que abre la lista de conversaciones para retomar una |
 | `↓ Final` | Volver al final del texto. Solo aparece si has subido |
 | Explorar | Recorrer las carpetas del ordenador y elegir una, sin teclear la ruta |
 | Mando redondo | Deslizarlo arriba avanza hacia el final del texto; abajo retrocede. Cuanto más lejos del centro, más rápido. Es la única forma de desplazar: la barra de xterm está oculta para que no se pisen |
