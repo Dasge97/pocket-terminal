@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import { resolve, sep, extname } from 'node:path';
+import { readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { resolve, sep, extname, dirname, isAbsolute, join } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { Auth } from './auth.mjs';
 import { Sessions } from './sessions.mjs';
@@ -35,6 +35,43 @@ async function readJson(req) {
   } catch { throw Object.assign(new Error('JSON inválido.'), { status: 400 }); }
 }
 
+// The folder picker only ever lists names. It never opens, reads, runs or
+// changes a file, and its single result is the folder a new terminal starts in.
+const BROWSE_LIMIT = 2000;
+let rootsCache = { at: 0, value: null };
+async function roots() {
+  if (process.platform !== 'win32') return ['/'];
+  if (rootsCache.value && Date.now() - rootsCache.at < 30_000) return rootsCache.value;
+  const found = await Promise.all([...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map(letter => Promise.race([
+    stat(`${letter}:${sep}`).then(() => `${letter}:${sep}`, () => null),
+    // A drive that never answers must not hold up the whole listing.
+    new Promise(done => { setTimeout(() => done(null), 1500).unref?.(); }),
+  ])));
+  rootsCache = { at: Date.now(), value: found.filter(Boolean) };
+  return rootsCache.value;
+}
+async function browse(requested, config) {
+  if (requested && (requested.length > 4096 || !isAbsolute(requested))) {
+    throw Object.assign(new Error('Introduce una ruta absoluta de tu ordenador.'), { status: 400 });
+  }
+  let path;
+  try { path = await realpath(resolve(requested || config.defaultCwd)); }
+  catch { throw Object.assign(new Error('No se encuentra esa carpeta en tu ordenador.'), { status: 404 }); }
+  if (!(await stat(path)).isDirectory()) throw Object.assign(new Error('La ruta no es una carpeta.'), { status: 400 });
+  let found;
+  try { found = await readdir(path, { withFileTypes: true }); }
+  catch { throw Object.assign(new Error('No tienes permiso para ver esta carpeta.'), { status: 403 }); }
+  const entries = [];
+  for (const item of found.slice(0, BROWSE_LIMIT)) {
+    // A link to a folder should behave like the folder it points at.
+    const dir = item.isDirectory() || (item.isSymbolicLink() && await stat(join(path, item.name)).then(s => s.isDirectory(), () => false));
+    entries.push({ name: item.name, dir });
+  }
+  entries.sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name, 'es', { numeric: true, sensitivity: 'base' }));
+  const parent = dirname(path);
+  return { path, parent: parent === path ? null : parent, sep, entries, truncated: found.length > BROWSE_LIMIT, roots: await roots() };
+}
+
 export function createApp(config) {
   const auth = new Auth(config);
   const sessions = new Sessions(config);
@@ -61,6 +98,9 @@ export function createApp(config) {
         if (!auth.check(req)) return json(res, 401, { error: 'Inicia sesión para continuar.' });
         if (req.method === 'GET' && url.pathname === '/api/state') {
           return json(res, 200, { sessions: sessions.list(), defaultCwd: config.defaultCwd, shell: config.shell, platform: process.platform });
+        }
+        if (req.method === 'GET' && url.pathname === '/api/browse') {
+          return json(res, 200, await browse(url.searchParams.get('path'), config));
         }
         if (req.method === 'POST' && url.pathname === '/api/logout') {
           const token = auth.token(req);

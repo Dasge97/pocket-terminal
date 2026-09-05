@@ -86,11 +86,27 @@
         <label for="session-name">Nombre <span class="muted">(opcional)</span></label>
         <input id="session-name" maxlength="60" placeholder="Mi proyecto" autocomplete="off" />
         <label for="session-cwd">Carpeta de tu ordenador</label>
-        <input id="session-cwd" required maxlength="4096" placeholder="C:\Users\TuUsuario\proyectos" autocomplete="off" autocapitalize="off" spellcheck="false" />
+        <div class="field-row">
+          <input id="session-cwd" required maxlength="4096" placeholder="C:\Users\TuUsuario\proyectos" autocomplete="off" autocapitalize="off" spellcheck="false" />
+          <button type="button" id="browse-button">Explorar</button>
+        </div>
         <p class="muted">Se abrirá una terminal real en esta carpeta.</p>
         <p id="new-error" class="error" role="alert"></p>
         <button id="create-button" class="primary" type="submit">Abrir terminal</button>
       </form>
+    </dialog>
+
+    <dialog id="browse-dialog">
+      <div class="dialog-heading"><h2>Elegir carpeta</h2><button type="button" data-close="browse-dialog" aria-label="Cerrar">×</button></div>
+      <p id="browse-path" class="browse-path"></p>
+      <div class="browse-actions">
+        <button type="button" id="browse-up">↑ Subir</button>
+        <button type="button" id="browse-roots">Unidades</button>
+      </div>
+      <p id="browse-error" class="error" role="alert"></p>
+      <ul id="browse-list" class="browse-list" aria-label="Contenido de la carpeta"></ul>
+      <p class="footnote">Solo se muestran los nombres. Los archivos no se abren ni se ejecutan.</p>
+      <button type="button" id="browse-pick" class="primary">Abrir la terminal aquí</button>
     </dialog>
 
     <dialog id="settings-dialog">

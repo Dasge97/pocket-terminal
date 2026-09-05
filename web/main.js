@@ -214,6 +214,57 @@ $('new-form').addEventListener('submit', async event => {
   } catch (error) { $('new-error').textContent = error.message; }
   finally { $('create-button').disabled = false; }
 });
+// Explorador de carpetas. It only lists names so the folder for a new terminal
+// can be picked by tapping instead of typing a Windows path on a phone.
+let browsePath = null, browseRoots = [], browseSep = '\\';
+function browseRow(icon, label, open) {
+  const item = document.createElement('li'), button = document.createElement('button');
+  const mark = document.createElement('span'), name = document.createElement('span');
+  button.type = 'button';
+  mark.className = 'entry-icon'; mark.textContent = icon; mark.setAttribute('aria-hidden', 'true');
+  name.className = 'entry-name'; name.textContent = label;
+  button.append(mark, name);
+  if (open) button.onclick = open; else button.disabled = true;
+  item.append(button);
+  return item;
+}
+async function openFolder(path, fallback = true) {
+  $('browse-error').textContent = ''; $('browse-path').textContent = 'Cargando…';
+  $('browse-pick').disabled = true; $('browse-up').disabled = true; $('browse-list').replaceChildren();
+  try {
+    const data = await api(`/browse?path=${encodeURIComponent(path ?? '')}`);
+    browsePath = data.path; browseRoots = data.roots; browseSep = data.sep;
+    $('browse-path').textContent = data.path;
+    $('browse-pick').disabled = false;
+    $('browse-up').disabled = !data.parent;
+    $('browse-up').onclick = () => { if (data.parent) openFolder(data.parent); };
+    const child = name => data.path + (data.path.endsWith(browseSep) ? '' : browseSep) + name;
+    const rows = data.entries.map(e => browseRow(e.dir ? '📁' : '📄', e.name, e.dir ? () => openFolder(child(e.name)) : null));
+    if (data.truncated) rows.push(browseRow('…', 'Hay más elementos de los que caben aquí', null));
+    if (!rows.length) rows.push(browseRow('·', 'Esta carpeta está vacía', null));
+    $('browse-list').replaceChildren(...rows);
+  } catch (error) {
+    // A path typed by hand may not exist; show the default folder instead of nothing.
+    if (fallback && path) { await openFolder('', false); $('browse-error').textContent = error.message; return; }
+    $('browse-path').textContent = browsePath ?? ''; $('browse-error').textContent = error.message;
+  }
+}
+$('browse-roots').onclick = () => {
+  browsePath = null;
+  $('browse-error').textContent = ''; $('browse-path').textContent = 'Unidades de tu ordenador';
+  $('browse-pick').disabled = true; $('browse-up').disabled = true;
+  const rows = browseRoots.map(root => browseRow('💾', root, () => openFolder(root)));
+  $('browse-list').replaceChildren(...(rows.length ? rows : [browseRow('·', 'No se han encontrado unidades', null)]));
+};
+$('browse-button').onclick = () => {
+  $('browse-dialog').showModal();
+  openFolder($('session-cwd').value.trim() || state?.defaultCwd || '');
+};
+$('browse-pick').onclick = () => {
+  if (!browsePath) return;
+  $('session-cwd').value = browsePath;
+  $('browse-dialog').close();
+};
 document.querySelectorAll('[data-close]').forEach(button => { button.onclick = () => $(button.dataset.close).close(); });
 $('settings-button').onclick = () => $('settings-dialog').showModal();
 function setFont(value) {

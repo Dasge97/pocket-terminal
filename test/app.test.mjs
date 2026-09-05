@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { createServer } from 'node:net';
@@ -171,6 +171,24 @@ test('reattaching sends a trimmed snapshot, answers a ping and serves the full h
   const full = b.messages.find(m => m.type === 'snapshot' && m.full);
   assert.ok(full.data.includes('L0 '), 'El historial completo no llegó al pedirlo.');
   assert.equal(f.app.sessions.items.get(s.id).exited, false);
+});
+
+test('the folder picker lists names only and refuses anything that is not a folder', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.request('/api/browse')).status, 401);
+  const cookie = await f.login();
+  await mkdir(join(f.cwd, 'proyectos'));
+  await writeFile(join(f.cwd, 'notas.txt'), 'contenido privado');
+  const res = await f.request(`/api/browse?path=${encodeURIComponent(f.cwd)}`, { cookie });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  // Folders come first so the ones that can be picked are within reach.
+  assert.deepEqual(body.entries, [{ name: 'proyectos', dir: true }, { name: 'notas.txt', dir: false }]);
+  assert.ok(!JSON.stringify(body).includes('contenido privado'), 'El explorador devolvió el contenido de un archivo.');
+  assert.ok(body.roots.length > 0, 'No se devolvió ninguna unidad.');
+  assert.equal((await f.request(`/api/browse?path=${encodeURIComponent(join(f.cwd, 'notas.txt'))}`, { cookie })).status, 400);
+  assert.equal((await f.request(`/api/browse?path=${encodeURIComponent(join(f.cwd, 'no-existe'))}`, { cookie })).status, 404);
+  assert.equal((await f.request('/api/browse?path=carpeta%2Frelativa', { cookie })).status, 400);
 });
 
 test('logout revokes open WebSockets without killing the PTY', async t => {
