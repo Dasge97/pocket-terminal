@@ -88,6 +88,8 @@ Para que te llegue la dirección al móvil, crea un bot hablando con [@BotFather
 npm.cmd run telegram -- <token del bot>
 ```
 
+Junto a la dirección y la contraseña, el bot manda un mensaje con cuatro botones: Arrancar, Parar, Reiniciar y Estado. No hace falta recordar ni teclear las órdenes.
+
 El comando espera a que escribas a tu bot y así averigua a qué chat responder. **Un bot de Telegram es público: cualquiera puede escribirle.** Pocket Terminal solo obedece al chat guardado y descarta el resto sin contestar, de modo que un desconocido no recibe respuesta alguna.
 
 Con el bot configurado puedes manejarlo desde el móvil sin tocar el ordenador:
@@ -96,6 +98,7 @@ Con el bot configurado puedes manejarlo desde el móvil sin tocar el ordenador:
 |---|---|
 | `/arrancar` | Abre el túnel, enciende Pocket Terminal y te manda dirección y contraseña |
 | `/parar` | Cierra Pocket Terminal y el túnel |
+| `/reiniciar` | Lo para y lo vuelve a abrir, con dirección y contraseña nuevas |
 | `/estado` | Dice si está en marcha y repite los datos |
 | `/ayuda` | Lista de órdenes |
 
@@ -169,7 +172,9 @@ El panel **se queda abierto** mientras lo usas, porque las flechas y Tab se puls
 |---|---|
 | Pestaña del borde derecho | Abrir y cerrar el panel de herramientas |
 | Selector del panel | Cambiar entre terminales |
-| `＋` | Crear una terminal con nombre y carpeta |
+| `＋ Nueva` | Crear una terminal eligiendo la carpeta. Se llama como la carpeta y ofrece las cinco últimas que usaste |
+| Lanzar claude | Escribe `claude` y lo ejecuta, sin teclear en el móvil |
+| `↓ Final` | Volver al final del texto. Solo aparece si has subido |
 | Explorar | Recorrer las carpetas del ordenador y elegir una, sin teclear la ruta |
 | Mando redondo | Deslizarlo arriba avanza hacia el final del texto; abajo retrocede. Cuanto más lejos del centro, más rápido. Es la única forma de desplazar: la barra de xterm está oculta para que no se pisen |
 | `A−` / `A+` | Cambiar el tamaño de letra |

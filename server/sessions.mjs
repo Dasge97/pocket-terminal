@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
+import { basename, isAbsolute, parse } from 'node:path';
 import pty from 'node-pty';
 import headless from '@xterm/headless';
 import serialize from '@xterm/addon-serialize';
@@ -22,9 +22,23 @@ export function releaseConoutWorker(processPty) {
   try { processPty?._agent?._conoutSocketWorker?.dispose(); } catch {}
 }
 
+// Naming a terminal by hand adds nothing: every session dies with the server,
+// so the name never outlives the folder it was opened in. The folder itself is
+// what tells them apart.
+function folderName(cwd) {
+  return basename(cwd) || parse(cwd).root.replace(/[\/]+$/, '') || 'Terminal';
+}
+
 export class Sessions {
   constructor(config) { this.config = config; this.items = new Map(); this.creating = 0; }
   list() { return [...this.items.values()].map(s => this.info(s)); }
+  // Dos terminales en la misma carpeta comparten nombre; el sufijo las separa.
+  uniqueName(base) {
+    const usados = new Set([...this.items.values()].map(s => s.name));
+    if (!usados.has(base)) return base;
+    for (let n = 2; n <= this.config.maxSessions + 1; n++) if (!usados.has(`${base} ${n}`)) return `${base} ${n}`;
+    return base;
+  }
   info(s) { return { id: s.id, name: s.name, cwd: s.cwd, createdAt: s.createdAt, exited: s.exited, exitCode: s.exitCode, cols: s.term.cols, rows: s.term.rows }; }
   async create({ cwd = this.config.defaultCwd, cols = 80, rows = 24, name = '' } = {}) {
     if (this.items.size + this.creating >= this.config.maxSessions) throw new Error('Límite de 8 sesiones. Cierra una antes de crear otra.');
@@ -48,7 +62,7 @@ export class Sessions {
       const processPty = pty.spawn(this.config.shell, this.config.shellArgs, { cols, rows, cwd, env, name: 'xterm-256color', ...(process.platform === 'win32' ? { useConptyDll: true } : {}) });
       let resolveExit;
       const closed = new Promise(resolve => { resolveExit = resolve; });
-      const s = { id: randomUUID(), name: name.trim() || `Terminal ${this.items.size + 1}`, cwd, createdAt: new Date().toISOString(), term, serializer, pty: processPty, exited: false, client: null, queue: Promise.resolve(), pending: [], pendingChars: 0, flushTimer: null, closed };
+      const s = { id: randomUUID(), name: name.trim() || this.uniqueName(folderName(cwd)), cwd, createdAt: new Date().toISOString(), term, serializer, pty: processPty, exited: false, client: null, queue: Promise.resolve(), pending: [], pendingChars: 0, flushTimer: null, closed };
       this.items.set(s.id, s);
       // Answer terminal queries while detached so interactive programs can start
       // without waiting for a browser. Attached clients answer their own queries.

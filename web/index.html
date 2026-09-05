@@ -19,16 +19,21 @@
   <body>
     <main id="app">
       <section id="login-view" class="gate" hidden>
+        <!-- Compacto a propósito: con el teclado abierto queda poco alto, y el
+             botón de entrar tiene que seguir a la vista. -->
         <form id="login-form" class="login-card">
-          <div class="brand-icon" aria-hidden="true">›_</div>
-          <p class="eyebrow">POCKET TERMINAL</p>
-          <h1>Tu ordenador.<br />En tu bolsillo.</h1>
-          <p class="muted">Abre tu terminal y sigue donde lo dejaste.</p>
+          <div class="login-brand">
+            <span class="brand-icon" aria-hidden="true">›_</span>
+            <h1>Pocket Terminal</h1>
+          </div>
           <label for="password">Contraseña</label>
-          <input id="password" type="password" autocomplete="current-password" required maxlength="1024" placeholder="Tu contraseña de acceso" />
+          <div class="field-row">
+            <input id="password" type="password" autocomplete="current-password" required maxlength="1024" placeholder="Pégala aquí" />
+            <button type="button" id="paste-password">Pegar</button>
+          </div>
           <p id="login-error" class="error" role="alert"></p>
           <button id="login-button" class="primary" type="submit">Entrar</button>
-          <p class="footnote">Acceso a tu equipo · Sesión privada</p>
+          <p class="footnote">Cambia cada vez que arrancas Pocket Terminal.</p>
         </form>
       </section>
 
@@ -48,6 +53,8 @@
             <span id="scroll-knob" aria-hidden="true"></span>
             <span class="pad-hint pad-down" aria-hidden="true">▼</span>
           </div>
+          <!-- Solo aparece cuando hay texto por debajo de lo que se ve. -->
+          <button id="to-bottom" hidden aria-label="Volver al final del texto">↓ Final</button>
         </div>
 
         <!-- Todo lo que no es la terminal vive aquí, para que la pantalla sea
@@ -76,6 +83,7 @@
             <button data-key="enter" aria-label="Intro" class="wide-key">↵</button>
           </div>
           <div class="actions-row">
+            <button id="run-claude" class="wide-action" data-run="claude">Lanzar claude</button>
             <button id="keyboard-button">Teclado</button>
             <button id="compose-button">Escribir</button>
             <button id="paste-button">Pegar</button>
@@ -93,16 +101,18 @@
     <dialog id="new-dialog">
       <form id="new-form">
         <div class="dialog-heading"><h2>Nueva terminal</h2><button type="button" data-close="new-dialog" aria-label="Cerrar">×</button></div>
-        <label for="session-name">Nombre <span class="muted">(opcional)</span></label>
-        <input id="session-name" maxlength="60" placeholder="Mi proyecto" autocomplete="off" />
         <label for="session-cwd">Carpeta de tu ordenador</label>
         <div class="field-row">
           <input id="session-cwd" required maxlength="4096" placeholder="C:\Users\TuUsuario\proyectos" autocomplete="off" autocapitalize="off" spellcheck="false" />
           <button type="button" id="browse-button">Explorar</button>
         </div>
-        <p class="muted">Se abrirá una terminal real en esta carpeta.</p>
+        <div id="recent-cwds" class="recent-cwds" hidden></div>
         <p id="new-error" class="error" role="alert"></p>
-        <button id="create-button" class="primary" type="submit">Abrir terminal</button>
+        <!-- Pegado abajo: con el teclado abierto el diálogo no cabe entero y el
+             botón quedaba fuera de la pantalla. -->
+        <div class="dialog-footer">
+          <button id="create-button" class="primary" type="submit">Abrir terminal</button>
+        </div>
       </form>
     </dialog>
 

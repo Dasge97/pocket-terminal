@@ -113,11 +113,21 @@ export async function say(settings, text, extra = {}) {
   return telegramCall(settings.botToken, 'sendMessage', { chat_id: settings.chatId, text, disable_web_page_preview: true, ...extra });
 }
 
-// Two messages on purpose: the link stays tappable, and the password sits alone
-// in a code block that Telegram copies with a single tap.
+// Los botones que acompañan al aviso: las cuatro cosas que se hacen desde el
+// móvil, sin tener que recordar ni teclear las órdenes.
+export const BOTONERA = {
+  inline_keyboard: [
+    [{ text: '▶ Arrancar', callback_data: 'arrancar' }, { text: '■ Parar', callback_data: 'parar' }],
+    [{ text: '↻ Reiniciar', callback_data: 'reiniciar' }, { text: 'ⓘ Estado', callback_data: 'estado' }],
+  ],
+};
+
+// Tres mensajes a propósito: el enlace se toca, la contraseña va sola en un
+// bloque que Telegram copia de un toque, y los botones no estorban a ninguno.
 export async function announce(settings, url, password) {
   await say(settings, `Pocket Terminal en marcha\n\n${url}`);
   await say(settings, `\`${password}\``, { parse_mode: 'MarkdownV2' });
+  await say(settings, 'Qué quieres hacer:', { reply_markup: BOTONERA });
 }
 
 /* ---------- arranque y parada ---------- */

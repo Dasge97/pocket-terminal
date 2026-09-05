@@ -1,7 +1,7 @@
 import { appendFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startControlServer } from './control.mjs';
-import { announce, botLockPort, botLogPath, configPort, readTelegram, say, startService, status, stopService, telegramCall, writeBotPid } from './runtime.mjs';
+import { announce, BOTONERA, botLockPort, botLogPath, configPort, readTelegram, say, startService, status, stopService, telegramCall, writeBotPid } from './runtime.mjs';
 
 // Started by the scheduled task there is no console to read, so keep a file.
 const stamp = () => new Date().toLocaleString('es-ES');
@@ -36,7 +36,8 @@ if (!settings) {
   process.exit(1);
 }
 
-const AYUDA = 'Órdenes que entiendo:\n\n/arrancar — abre el túnel y enciende Pocket Terminal\n/parar — cierra Pocket Terminal y el túnel\n/estado — te digo si está en marcha\n/ayuda — esta lista';
+const AYUDA = 'Órdenes que entiendo:\n\n/arrancar — abre el túnel y enciende Pocket Terminal\n/parar — cierra Pocket Terminal y el túnel\n/reiniciar — lo para y lo vuelve a abrir, con dirección y contraseña nuevas\n/estado — te digo si está en marcha\n/ayuda — esta lista';
+const ayuda = () => say(settings, AYUDA, { reply_markup: BOTONERA });
 
 let busy = false;
 async function arrancar() {
@@ -57,7 +58,15 @@ async function arrancar() {
 async function parar() {
   const estaba = await stopService();
   log(estaba ? 'detenido por orden de Telegram' : 'orden de parar sin nada en marcha');
-  await say(settings, estaba ? 'Pocket Terminal detenido. Las terminales abiertas se han cerrado.' : 'No había nada en marcha.');
+  await say(settings, estaba ? 'Pocket Terminal detenido. Las terminales abiertas se han cerrado.' : 'No había nada en marcha.', { reply_markup: BOTONERA });
+}
+
+// Reiniciar en una sola orden: pararlo y arrancarlo eran dos mensajes, y es lo
+// que se hace cuando el túnel deja de responder.
+async function reiniciar() {
+  if (busy) return say(settings, 'Espera, estoy con la orden anterior.');
+  await stopService();
+  await arrancar();
 }
 
 async function estado() {
@@ -69,7 +78,7 @@ async function estado() {
   await announce(settings, now.url, now.password);
 }
 
-const ordenes = { '/arrancar': arrancar, '/parar': parar, '/estado': estado, '/ayuda': () => say(settings, AYUDA), '/start': () => say(settings, AYUDA) };
+const ordenes = { '/arrancar': arrancar, '/parar': parar, '/reiniciar': reiniciar, '/estado': estado, '/ayuda': ayuda, '/start': ayuda };
 
 let offset = 0, avisadoDeIntrusos = 0;
 async function escuchar() {
@@ -78,6 +87,19 @@ async function escuchar() {
       const updates = await telegramCall(settings.botToken, `getUpdates?offset=${offset}&timeout=30`);
       for (const update of updates) {
         offset = update.update_id + 1;
+
+        // Pulsación de uno de los botones del aviso.
+        const pulsacion = update.callback_query;
+        if (pulsacion) {
+          const suyo = String(pulsacion.message?.chat?.id ?? pulsacion.from?.id) === String(settings.chatId);
+          // Contestar siempre, o el botón se queda dando vueltas en el móvil.
+          try { await telegramCall(settings.botToken, 'answerCallbackQuery', { callback_query_id: pulsacion.id, text: suyo ? '' : 'No autorizado' }); } catch {}
+          if (!suyo) { log(`botón pulsado desde un chat ajeno (${pulsacion.from?.id})`); continue; }
+          const orden = ordenes[`/${pulsacion.data}`];
+          if (orden) { log(`botón pulsado: ${pulsacion.data}`); await orden(); }
+          continue;
+        }
+
         const message = update.message;
         if (!message?.text) continue;
         if (String(message.chat.id) !== String(settings.chatId)) {

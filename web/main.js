@@ -32,9 +32,21 @@ async function api(path, options = {}) {
 function status(text, kind = '') {
   $('connection-status').textContent = text; $('connection-status').dataset.state = kind;
 }
-function notice(text) {
-  clearTimeout(noticeTimer); $('notice').textContent = text; $('notice').hidden = false;
-  noticeTimer = setTimeout(() => { $('notice').hidden = true; resize(); }, 6000); resize();
+// `action` añade un botón dentro del propio aviso: si el aviso pide hacer algo,
+// lo suyo es poder hacerlo ahí mismo y no ir a buscarlo.
+function notice(text, action = null) {
+  clearTimeout(noticeTimer);
+  const caja = $('notice');
+  caja.replaceChildren(document.createTextNode(text));
+  if (action) {
+    const boton = document.createElement('button');
+    boton.type = 'button'; boton.className = 'notice-action'; boton.textContent = action.label;
+    boton.onclick = () => { caja.hidden = true; clearTimeout(noticeTimer); action.run(); };
+    caja.append(boton);
+  }
+  caja.hidden = false;
+  noticeTimer = setTimeout(() => { caja.hidden = true; resize(); }, action ? 12_000 : 6000);
+  resize();
 }
 function viewport() {
   const v = window.visualViewport;
@@ -53,7 +65,10 @@ function checkWidth() {
   if (term.cols >= COMFORTABLE_COLS) { warnedNarrow = false; return; }
   if (warnedNarrow) return;
   warnedNarrow = true;
-  notice(`Solo caben ${term.cols} columnas. PowerShell recortará las tablas: en «ls» se pierden los nombres. Gira el móvil o reduce la letra con A−.`);
+  notice(
+    `Solo caben ${term.cols} columnas. PowerShell recortará las tablas: en «ls» se pierden los nombres. Gira el móvil o reduce la letra.`,
+    fontSize > 12 ? { label: 'Reducir la letra', run: () => setFont(fontSize - 2) } : null,
+  );
 }
 function resize() {
   cancelAnimationFrame(resizeFrame);
@@ -184,8 +199,13 @@ function connect() {
     online = false; restoring = false;
     if (event.code === 4401) { showLogin(); return; }
     if (event.code === 4409) {
-      stopRetry = true; status('Abierta en otro dispositivo', 'error');
-      notice('Puedes recuperarla desde Ajustes → Volver a conectar.'); return;
+      // Solo un cliente por terminal, o dos navegadores se pelearían por el
+      // tamaño y las pulsaciones. Recuperarla tiene que ser un toque, no un
+      // paseo por los ajustes.
+      stopRetry = true; status('Abierta en otro sitio', 'error');
+      notice('Esta terminal se ha abierto en otra pestaña o en otro dispositivo. Solo puede usarse desde un sitio a la vez.',
+        { label: 'Recuperarla aquí', run: () => { if (selected) choose(selected); } });
+      return;
     }
     if (event.code === 4404) {
       try { await refresh(); const first = state.sessions[0]; if (first) choose(first.id); else empty(); }
@@ -206,22 +226,68 @@ function connect() {
   ws.onerror = () => {}; // onclose handles connection failures without duplicate retries.
 }
 
-$('login-form').addEventListener('submit', async event => {
-  event.preventDefault(); $('login-button').disabled = true; $('login-error').textContent = '';
+async function submitLogin() {
+  if ($('login-button').disabled) return;
+  $('login-button').disabled = true; $('login-error').textContent = '';
   try { await api('/login', { method: 'POST', body: JSON.stringify({ password: $('password').value }) }); $('password').value = ''; await unlock(); }
   catch (error) { $('login-error').textContent = error.message; }
   finally { $('login-button').disabled = false; }
-});
+}
+$('login-form').addEventListener('submit', event => { event.preventDefault(); submitLogin(); });
+// La contraseña llega por Telegram y se trae en el portapapeles, así que pegarla
+// ya es toda la intención: no hace falta un segundo toque en Entrar.
+$('paste-password').onclick = async () => {
+  try {
+    const texto = (await navigator.clipboard.readText()).trim();
+    if (!texto) { $('login-error').textContent = 'El portapapeles está vacío.'; return; }
+    $('password').value = texto;
+    submitLogin();
+  } catch {
+    $('login-error').textContent = 'El navegador no deja leer el portapapeles. Mantén pulsado el campo y pega a mano.';
+    $('password').focus();
+  }
+};
+$('password').addEventListener('paste', () => { setTimeout(() => { if ($('password').value.trim()) submitLogin(); }, 0); });
+
 $('session-select').addEventListener('change', event => { if (event.target.value) choose(event.target.value); });
+
+// Carpetas recientes: abrir una terminal donde ya estuviste es lo más común, y
+// teclear una ruta de Windows en un móvil es lo más incómodo que hay.
+const RECENT_KEY = 'pocket-recent-cwds';
+function recentCwds() {
+  try { return JSON.parse(readPref(RECENT_KEY, '[]')).filter(p => typeof p === 'string').slice(0, 5); }
+  catch { return []; }
+}
+function rememberCwd(path) {
+  const lista = [path, ...recentCwds().filter(p => p !== path)].slice(0, 5);
+  savePref(RECENT_KEY, JSON.stringify(lista));
+}
+function paintRecents() {
+  const caja = $('recent-cwds'), lista = recentCwds();
+  caja.replaceChildren();
+  caja.hidden = !lista.length;
+  for (const path of lista) {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.textContent = path.split(/[\\/]/).filter(Boolean).at(-1) || path;
+    boton.title = path;
+    boton.onclick = () => { $('session-cwd').value = path; };
+    caja.append(boton);
+  }
+}
 function newDialog() {
-  $('session-cwd').value = state?.defaultCwd ?? ''; $('session-name').value = ''; $('new-error').textContent = '';
+  $('session-cwd').value = recentCwds()[0] ?? state?.defaultCwd ?? '';
+  $('new-error').textContent = '';
+  paintRecents();
   $('new-dialog').showModal();
 }
 $('new-button').onclick = newDialog; $('first-terminal').onclick = newDialog;
 $('new-form').addEventListener('submit', async event => {
   event.preventDefault(); $('create-button').disabled = true; $('new-error').textContent = '';
   try {
-    const s = await api('/sessions', { method: 'POST', body: JSON.stringify({ cwd: $('session-cwd').value, name: $('session-name').value, cols: opened ? term.cols : 40, rows: opened ? term.rows : 24 }) });
+    const cwd = $('session-cwd').value;
+    const s = await api('/sessions', { method: 'POST', body: JSON.stringify({ cwd, cols: opened ? term.cols : 40, rows: opened ? term.rows : 24 }) });
+    rememberCwd(s.cwd || cwd);
     state.sessions.push(s); $('new-dialog').close(); choose(s.id);
   } catch (error) { $('new-error').textContent = error.message; }
   finally { $('create-button').disabled = false; }
@@ -452,6 +518,25 @@ function showTools(open) {
 }
 toolsTab.addEventListener('pointerdown', event => event.preventDefault());
 toolsTab.onclick = () => showTools(tools.hidden);
+
+// Atajos a comandos: escribir `claude` en un teclado de móvil, cada vez que se
+// abre una terminal, es de las cosas que más se repiten.
+for (const boton of document.querySelectorAll('[data-run]')) {
+  boton.addEventListener('pointerdown', event => event.preventDefault());
+  boton.onclick = () => { setCtrl(false); input(`${boton.dataset.run}\r`); };
+}
+
+// Volver al final del texto. Solo aparece cuando hay algo por debajo, para no
+// poner un botón que no hace nada la mayor parte del tiempo.
+const toBottom = $('to-bottom');
+function checkBottom() {
+  const b = term.buffer.active;
+  toBottom.hidden = $('terminal').hidden || b.type === 'alternate' || b.viewportY >= b.baseY;
+}
+toBottom.addEventListener('pointerdown', event => event.preventDefault());
+toBottom.onclick = () => { term.scrollToBottom(); checkBottom(); };
+term.onScroll(checkBottom);
+term.onRender(checkBottom);
 // Tocar la terminal la devuelve al frente; el panel no estorba más de la cuenta.
 $('terminal-area').addEventListener('pointerdown', () => { if (!tools.hidden) showTools(false); });
 showTools(false);
