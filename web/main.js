@@ -144,7 +144,7 @@ async function unlock() {
 function choose(id) {
   disconnect(); selected = id; retryCount = 0; stopRetry = false;
   savePref('pocket-session', id); options();
-  $('empty-state').hidden = true; $('terminal').hidden = false; pad.hidden = false;
+  $('empty-state').hidden = true; $('terminal').hidden = false; pad.hidden = !$('tools').hidden;
   if (!opened) { term.open($('terminal')); opened = true; }
   term.reset(); fit.fit(); connect();
 }
@@ -435,6 +435,26 @@ window.addEventListener('pageshow', event => { if (event.persisted) probe(); });
 window.addEventListener('online', probe);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') probe(); });
 window.addEventListener('beforeunload', () => clearInterval(heartbeat));
+
+// Panel de herramientas. Todo lo que no es la terminal vive aquí, de modo que
+// con el panel cerrado la pantalla es terminal y teclado y nada más. Se queda
+// abierto entre pulsaciones: las flechas y Tab se usan en tandas, y reabrirlo
+// para cada una sería peor que la barra fija que había antes.
+const tools = $('tools'), toolsTab = $('tools-tab');
+function showTools(open) {
+  tools.hidden = !open;
+  toolsTab.setAttribute('aria-expanded', String(open));
+  toolsTab.setAttribute('aria-label', open ? 'Cerrar herramientas' : 'Abrir herramientas');
+  toolsTab.firstElementChild.textContent = open ? '›' : '‹';
+  // El panel se superpone en lugar de encoger la terminal: redimensionarla
+  // haría que el programa en marcha repintase toda la pantalla cada vez.
+  pad.hidden = open || !selected;
+}
+toolsTab.addEventListener('pointerdown', event => event.preventDefault());
+toolsTab.onclick = () => showTools(tools.hidden);
+// Tocar la terminal la devuelve al frente; el panel no estorba más de la cuenta.
+$('terminal-area').addEventListener('pointerdown', () => { if (!tools.hidden) showTools(false); });
+showTools(false);
 // Keeps a copy of the page so the app opens instead of showing a network
 // error when there is no connection. The terminal still needs the server.
 navigator.serviceWorker?.register('/sw.js').catch(() => {});

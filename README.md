@@ -10,7 +10,7 @@ El servidor se ejecuta en tu Windows con tu usuario. El móvil envía pulsacione
 
 - Terminal a pantalla completa, tema oscuro y letra ajustable de 12 a 28 px (17 px por defecto).
 - Ajuste de columnas y filas al girar el móvil o abrir el teclado.
-- Teclas táctiles: Ctrl, Esc, Tab, Ctrl+C, flechas e Intro.
+- Panel lateral con las teclas Ctrl, Esc, Tab, ^C, flechas e Intro, oculto hasta que lo abres.
 - Campo auxiliar para escribir, pegar o usar el dictado del teclado del móvil.
 - Varias terminales, con nombre y carpeta inicial. Máximo: 8.
 - Reconexión a la misma sesión, conservando la pantalla y hasta 3.000 líneas de historial en memoria.
@@ -159,16 +159,23 @@ En vertical, para ver solo los nombres cabe usar `ls | Format-Table Name`, o `ls
 
 ## Uso desde el móvil
 
+**La pantalla es solo terminal.** No hay barra arriba ni botonera abajo: todo lo demás vive en un panel que se abre desde el borde derecho, tocando la pestaña estrecha que hay a media altura. Con el panel cerrado, la terminal ocupa la pantalla entera menos el teclado.
+
+En un iPhone de 390 px se pasa de 19 a 27 líneas visibles. Con el teclado abierto, de 7 a 13.
+
+El panel **se queda abierto** mientras lo usas, porque las flechas y Tab se pulsan en tandas. Se cierra tocando la terminal o la pestaña. Mientras está abierto se superpone al texto en lugar de encoger la terminal, para que el programa en marcha no repinte la pantalla cada vez.
+
 | Control | Acción |
 |---|---|
-| Selector superior | Cambiar entre terminales |
+| Pestaña del borde derecho | Abrir y cerrar el panel de herramientas |
+| Selector del panel | Cambiar entre terminales |
 | `＋` | Crear una terminal con nombre y carpeta |
 | Explorar | Recorrer las carpetas del ordenador y elegir una, sin teclear la ruta |
 | Mando redondo | Deslizarlo arriba avanza hacia el final del texto; abajo retrocede. Cuanto más lejos del centro, más rápido |
 | `A−` / `A+` | Cambiar el tamaño de letra |
 | Teclado | Abrir o cerrar el teclado del teléfono |
 | Ctrl | Aplicar Ctrl a la siguiente letra o carácter compatible |
-| Ctrl+C | Interrumpir el programa en primer plano |
+| `^C` | Interrumpir el programa en primer plano |
 | Escribir | Escribir o dictar texto en un campo normal y después insertarlo |
 | Pegar | Revisar el portapapeles antes de insertarlo; si el navegador no da acceso, pegar manualmente en el campo |
 | Copiar | Copiar la selección de xterm; la selección táctil depende del navegador |

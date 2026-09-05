@@ -33,17 +33,6 @@
       </section>
 
       <section id="workspace" hidden>
-        <header class="topbar">
-          <span class="small-brand" aria-label="Pocket Terminal">›_</span>
-          <div class="session-heading">
-            <label class="sr-only" for="session-select">Sesión de terminal</label>
-            <select id="session-select"><option value="">Tus terminales</option></select>
-            <span id="connection-status" role="status">Conectando…</span>
-          </div>
-          <button id="new-button" class="icon-button" aria-label="Nueva terminal" title="Nueva terminal">＋</button>
-          <button id="settings-button" class="icon-button" aria-label="Ajustes" title="Ajustes">⋯</button>
-        </header>
-        <div id="notice" role="status" hidden></div>
         <div id="terminal-area">
           <div id="empty-state">
             <span class="empty-mark" aria-hidden="true">›_</span>
@@ -53,13 +42,28 @@
             <p class="footnote">Después puedes ejecutar <code>claude</code>, <code>git</code> o <code>ssh</code>.</p>
           </div>
           <div id="terminal" aria-label="Terminal interactiva" hidden></div>
+          <div id="notice" role="status" hidden></div>
           <div id="scroll-pad" role="group" aria-label="Desplazar el texto de la terminal" hidden>
             <span class="pad-hint pad-up" aria-hidden="true">▲</span>
             <span id="scroll-knob" aria-hidden="true"></span>
             <span class="pad-hint pad-down" aria-hidden="true">▼</span>
           </div>
         </div>
-        <footer id="controls">
+
+        <!-- Todo lo que no es la terminal vive aquí, para que la pantalla sea
+             terminal y teclado y nada más mientras el panel está cerrado. -->
+        <button id="tools-tab" aria-expanded="false" aria-controls="tools" aria-label="Abrir herramientas">
+          <span aria-hidden="true">‹</span>
+        </button>
+        <aside id="tools" hidden>
+          <div class="tools-head">
+            <span class="small-brand" aria-hidden="true">›_</span>
+            <div class="session-heading">
+              <label class="sr-only" for="session-select">Sesión de terminal</label>
+              <select id="session-select"><option value="">Tus terminales</option></select>
+              <span id="connection-status" role="status">Conectando…</span>
+            </div>
+          </div>
           <div class="keys-row" aria-label="Teclas especiales">
             <button id="ctrl-key" aria-pressed="false">Ctrl</button>
             <button data-key="escape">Esc</button>
@@ -69,18 +73,19 @@
             <button data-key="down" aria-label="Flecha abajo">↓</button>
             <button data-key="left" aria-label="Flecha izquierda">←</button>
             <button data-key="right" aria-label="Flecha derecha">→</button>
-            <button data-key="enter" aria-label="Intro">↵</button>
+            <button data-key="enter" aria-label="Intro" class="wide-key">↵</button>
           </div>
           <div class="actions-row">
             <button id="keyboard-button">Teclado</button>
             <button id="compose-button">Escribir</button>
             <button id="paste-button">Pegar</button>
             <button id="copy-button">Copiar</button>
-            <span class="spacer"></span>
             <button id="font-down" aria-label="Reducir letra">A−</button>
             <button id="font-up" aria-label="Aumentar letra">A+</button>
+            <button id="new-button" aria-label="Nueva terminal">＋ Nueva</button>
+            <button id="settings-button" aria-label="Ajustes">⋯ Ajustes</button>
           </div>
-        </footer>
+        </aside>
       </section>
       <div id="loading-view" class="gate"><p class="muted" role="status">Abriendo Pocket Terminal…</p></div>
     </main>
