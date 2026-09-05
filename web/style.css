@@ -20,11 +20,15 @@
 #scroll-knob{width:28px;height:28px;border-radius:0;background:#33455c;border:1px solid #5a728f;pointer-events:none;transition:transform .13s ease-out}
 #scroll-pad[data-active] #scroll-knob{background:var(--accent);border-color:var(--accent);transition:none}
 /* Tirador: lo unico que se ve encima de la terminal cuando el panel esta cerrado. */
-#tools-tab,#sessions-tab{position:absolute;z-index:30;top:50%;transform:translateY(-50%);width:20px;min-height:74px;padding:0;border-radius:0;border:1px solid #3a4a6180;background:#1b243288;color:var(--muted);font-size:13px;opacity:.4;transition:opacity .15s}
+/* Las pestañas no tapan texto, así que se ven de verdad: sin ellas no hay
+   forma de dar con los paneles. */
+/* Presencia por color, no por tamaño: se ven de lejos y el texto de debajo
+   sigue leyéndose, que en 36 columnas cada carácter cuenta. */
+#tools-tab,#sessions-tab{position:absolute;z-index:30;top:50%;transform:translateY(-50%);width:22px;min-height:104px;padding:0;border-radius:0;border:1px solid var(--accent);background:#151f1acc;color:var(--accent);font-size:15px;font-weight:700;opacity:1;transition:background .15s,color .15s}
 #tools-tab{right:0;border-right:0}
 #sessions-tab{left:0;border-left:0}
-#tools-tab[aria-expanded=true]{right:var(--tools-width);opacity:1;background:#202a39;color:#edf1f7}
-#sessions-tab[aria-expanded=true]{left:var(--tools-width);opacity:1;background:#202a39;color:#edf1f7}
+#tools-tab[aria-expanded=true]{right:var(--tools-width);background:var(--accent);border-color:var(--accent);color:#0c2113}
+#sessions-tab[aria-expanded=true]{left:var(--tools-width);background:var(--accent);border-color:var(--accent);color:#0c2113}
 #tools,#sessions{position:absolute;z-index:29;top:0;bottom:0;width:var(--tools-width);padding:0 0 env(safe-area-inset-bottom);background:#151b25;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column}
 #tools{right:0;border-left:1px solid var(--border)}
 #sessions{left:0;border-right:1px solid var(--border)}
