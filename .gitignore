@@ -12,3 +12,6 @@ coverage/
 *.p12
 .DS_Store
 Thumbs.db
+
+# Scripts de prueba temporales
+_*.mjs

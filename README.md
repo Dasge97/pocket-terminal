@@ -1,35 +1,75 @@
+<div align="center">
+
 # Pocket Terminal
 
-**Tu terminal de Windows, cómoda en el móvil.**
+**Tu terminal de Windows, de verdad, en el móvil.**
 
-Una web pequeña que muestra una terminal real de tu ordenador. El texto se ajusta a las columnas disponibles en el teléfono: puedes leerlo a tamaño normal, abrir PowerShell, entrar en un proyecto y ejecutar `claude`, `git`, `ssh` o tus comandos habituales.
+PowerShell real en tu ordenador, con `claude`, `git` y `ssh`, manejado desde el teléfono.
+Lo enciendes por Telegram, entras por una dirección HTTPS y sigues donde lo dejaste.
 
-El servidor se ejecuta en tu Windows con tu usuario. El móvil envía pulsaciones y recibe la salida a través de WebSocket. No necesita la extensión de VS Code ni una clave de la API de Anthropic.
+</div>
 
-## Qué incluye
+<div align="center">
+<img src="docs/capturas/terminal.png" alt="La terminal ocupando la pantalla entera del móvil" width="270" />
+&nbsp;&nbsp;
+<img src="docs/capturas/panel.png" alt="El panel lateral con las teclas y los atajos" width="270" />
+</div>
 
-- Terminal a pantalla completa, tema oscuro y letra ajustable de 12 a 28 px (17 px por defecto).
-- Ajuste de columnas y filas al girar el móvil o abrir el teclado.
-- Panel lateral con las teclas Ctrl, Esc, Tab, ^C, flechas e Intro, oculto hasta que lo abres.
-- Campo auxiliar para escribir, pegar o usar el dictado del teclado del móvil.
-- Varias terminales, con nombre y carpeta inicial. Máximo: 8.
-- Reconexión a la misma sesión, conservando la pantalla y hasta 3.000 líneas de historial en memoria.
-- Mando de desplazamiento para mover el texto arriba y abajo con el pulgar, también dentro de Claude Code.
-- Explorador de carpetas para elegir dónde abrir una terminal sin teclear la ruta.
-- Contraseña, cookie HttpOnly, comprobación de origen y límite de intentos.
-- Panel de control con doble clic: estado de cada pieza y acciones para arreglarla.
-- Túnel temporal de Cloudflare, con contraseña nueva en cada arranque.
-- Bot de Telegram para encenderlo y apagarlo desde el móvil, con arranque automático al iniciar sesión en Windows.
-- Scripts de instalación, arranque e inicio automático para Windows.
-- Instalable en la pantalla de inicio del iPhone, con su icono. La terminal necesita conexión; sin ella se abre la app y avisa.
+---
 
-**La persistencia cubre cerrar el navegador o perder cobertura.** Reiniciar el servidor, cerrar la sesión de Windows o apagar el PC termina las terminales. Bloquear la pantalla de Windows mantiene los procesos; suspender el ordenador pausa el acceso hasta que despierte. Los programas que se lancen de forma independiente pueden tener otro ciclo de vida.
+## Índice
 
-## 1. Preparar Windows
+- [Qué es y qué no es](#qué-es-y-qué-no-es)
+- [Cómo funciona](#cómo-funciona)
+- [Instalación](#instalación)
+- [Encenderlo desde el móvil](#encenderlo-desde-el-móvil)
+- [Uso diario](#uso-diario)
+- [El ancho importa](#el-ancho-importa)
+- [Decisiones y mediciones](#decisiones-y-mediciones)
+- [Seguridad](#seguridad)
+- [Configuración](#configuración)
+- [Desarrollo](#desarrollo)
 
-Objetivo principal: **Windows 11 x64**, PowerShell y **Node.js 24 LTS**. Windows 10 reciente dispone de ConPTY, pero no se valida aquí cada versión. Windows ARM64 no está verificado.
+---
 
-Instala [Node.js 24](https://nodejs.org/en/download) y [Git para Windows](https://git-scm.com/downloads/win). Cierra y vuelve a abrir PowerShell para que recoja el PATH actualizado.
+## Qué es y qué no es
+
+**Es** una terminal real de tu Windows, servida a tu móvil. El texto se ajusta a las columnas del teléfono, las terminales sobreviven a que cierres el navegador o pierdas cobertura, y el bot de Telegram enciende y apaga el servicio sin que toques el ordenador.
+
+**No es** un escritorio remoto ni una máquina en la nube. Todo corre en tu PC con tu usuario. Si el ordenador está apagado, no hay terminal.
+
+**Para quién**: una persona y sus propios dispositivos. No es una plataforma para dar terminales a terceros.
+
+## Cómo funciona
+
+```
+   iPhone                    Internet                 Tu Windows
+┌──────────┐            ┌───────────────┐        ┌──────────────────┐
+│  la web  │◄──HTTPS───►│  túnel        │◄──────►│  servidor  :3210 │
+│  xterm   │◄──WSS─────►│  (cloudflared)│        │       │          │
+└──────────┘            └───────────────┘        │       ▼          │
+      ▲                                          │  PowerShell      │
+      │                 ┌───────────────┐        │  (ConPTY)        │
+      └───órdenes──────►│   Telegram    │◄──────►│  bot      :3211  │
+          y avisos      └───────────────┘        │  panel de control│
+                                                 └──────────────────┘
+```
+
+Tres piezas, cada una con un trabajo:
+
+| Pieza | Qué hace | Dónde vive |
+|---|---|---|
+| **Servidor** | Abre PowerShell en una terminal real y la sirve por WebSocket | Tu PC, puerto 3210 |
+| **Bot** | Enciende y apaga el servicio desde Telegram, y sirve el panel de control | Tu PC, puerto 3211 |
+| **Túnel** | Da una dirección HTTPS pública sin abrir puertos en el router | Proceso aparte |
+
+El bot escucha desde que inicias sesión en Windows. El servidor y el túnel, solo cuando los enciendes.
+
+---
+
+## Instalación
+
+**Requisitos**: Windows 11 x64, [Node.js 24 LTS](https://nodejs.org/en/download) y [Git para Windows](https://git-scm.com/downloads/win). Windows 10 reciente tiene ConPTY, pero no se valida aquí cada versión. Windows ARM64 no está verificado.
 
 ```powershell
 git clone https://github.com/Dasge97/pocket-terminal.git
@@ -37,76 +77,27 @@ cd pocket-terminal
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Setup.ps1
 ```
 
-El script instala dependencias, compila la web y pregunta:
+El asistente instala dependencias, compila la web y pregunta la carpeta inicial, la dirección de acceso y la contraseña. La contraseña no se muestra al escribirla y solo se guarda un hash con sal.
 
-1. **Carpeta inicial**, por ejemplo `C:\Users\TuUsuario\proyectos`.
-2. **URL de acceso**. Para probar en el PC, acepta `http://localhost:3210`.
-3. **Contraseña**, de al menos 12 caracteres. No aparece al escribirla y se guarda únicamente un hash con sal.
-
-`-ExecutionPolicy Bypass` se limita a este proceso de PowerShell; no cambia la política permanente del equipo. Puedes ejecutar directamente el script si tu política ya lo permite. No necesitas abrir Pocket Terminal como administrador.
-
-### Si falla la instalación de node-pty
-
-`node-pty` contiene componentes nativos. Si no hay un binario compatible, necesita compilarse. Instala Python 3 y Visual Studio 2022 Build Tools con **Desarrollo para el escritorio con C++**, MSVC y Windows SDK. Si aparece `MSB8040`, añade las bibliotecas MSVC con mitigación Spectre correspondientes. Después vuelve a ejecutar `Setup.ps1`. Referencias: [node-pty](https://github.com/microsoft/node-pty#dependencies) y [node-gyp para Windows](https://github.com/nodejs/node-gyp#on-windows).
-
-## 2. Arrancar
-
-Haz doble clic en **`Pocket Terminal.cmd`**, dentro de la carpeta del proyecto. Se abre el panel de control en tu navegador: arriba el estado de cada pieza, debajo los botones. Si el bot no estaba en marcha, el icono lo arranca antes de abrir la página.
-
-**Arrancar con túnel** abre un túnel de Cloudflare y enciende el servidor. El panel te muestra la dirección y una contraseña nueva, y te las manda por Telegram si lo tienes configurado. **Arrancar solo aquí** enciende el servidor sin túnel, accesible únicamente desde este ordenador.
-
-Abre esa dirección, introduce la contraseña y pulsa **Nueva terminal**. La ruta del formulario corresponde a una carpeta de Windows, no del teléfono. También puedes cambiar de carpeta con `cd` dentro de PowerShell.
-
-**Cerrar el panel no para nada.** El servidor y el túnel siguen por su cuenta hasta que los pares desde el panel o desde el bot. El botón `Ctrl+C` de la web se envía únicamente al programa de la terminal seleccionada.
-
-El panel también sirve para arreglar lo que falle: parar el bot, instalar o quitar el arranque automático, recompilar la web, ver el registro del bot, liberar el puerto si queda ocupado por un servidor anterior y cerrar túneles que se hayan quedado abiertos.
-
-### Cómo está protegido el panel
-
-Lo sirve el proceso del bot, no el servidor de Pocket Terminal. Va así a propósito: el panel sirve para arrancar el servidor, de modo que no puede depender de que el servidor funcione.
-
-Escucha en `127.0.0.1` y en el puerto siguiente al del servidor, el 3211 por defecto. El túnel apunta al 3210, así que el panel nunca sale a internet. Además rechaza las peticiones cuyo `Host` no sea `127.0.0.1` ni `localhost`, y toda acción exige una clave que se genera al arrancar el bot: el icono la pasa en la dirección al abrir el navegador. Una página web cualquiera que intente mandar órdenes al puerto no conoce esa clave, y sin cabeceras CORS tampoco puede leer las respuestas.
-
-Si prefieres la consola: `npm.cmd run panel` abre un panel equivalente en modo texto, `npm.cmd run launch` arranca sin menú, y `npm.cmd start` levanta solo el servidor con la configuración guardada. El icono cae al panel de consola por su cuenta si no consigue abrir el navegador.
-
-**La contraseña cambia en cada arranque.** No hay que recordarla: llega por Telegram y aparece en el panel mientras el servicio está en marcha.
-
-## 2b. Túnel temporal y aviso por Telegram
-
-El túnel usa [cloudflared](https://github.com/cloudflare/cloudflared). Instálalo una vez, sin permisos de administrador:
+Después, **cloudflared**, que es lo que da la dirección HTTPS. No necesita permisos de administrador:
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\cloudflared" | Out-Null
 Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "$env:LOCALAPPDATA\cloudflared\cloudflared.exe" -UseBasicParsing
 ```
 
-La dirección que da es distinta cada vez y deja de existir al cerrar el túnel. Cualquiera que la tenga llega a tu formulario de contraseña, así que ciérralo cuando no lo uses.
+<details>
+<summary><b>Si falla la instalación de node-pty</b></summary>
 
-Para que te llegue la dirección al móvil, crea un bot hablando con [@BotFather](https://t.me/BotFather) en Telegram, envíale `/newbot` y guarda el token. Después:
+`node-pty` tiene componentes nativos. Si no hay un binario compatible, necesita compilarse. Instala Python 3 y Visual Studio 2022 Build Tools con **Desarrollo para el escritorio con C++**, MSVC y Windows SDK. Si aparece `MSB8040`, añade las bibliotecas MSVC con mitigación Spectre. Después vuelve a ejecutar `Setup.ps1`.
 
-```powershell
-npm.cmd run telegram -- <token del bot>
-```
+Referencias: [node-pty](https://github.com/microsoft/node-pty#dependencies) y [node-gyp para Windows](https://github.com/nodejs/node-gyp#on-windows).
+</details>
 
-Junto a la dirección y la contraseña, el bot manda un mensaje con cuatro botones: Arrancar, Parar, Reiniciar y Estado. No hace falta recordar ni teclear las órdenes.
+<details>
+<summary><b>Comprobar que claude, git y ssh funcionan</b></summary>
 
-El comando espera a que escribas a tu bot y así averigua a qué chat responder. **Un bot de Telegram es público: cualquiera puede escribirle.** Pocket Terminal solo obedece al chat guardado y descarta el resto sin contestar, de modo que un desconocido no recibe respuesta alguna.
-
-Con el bot configurado puedes manejarlo desde el móvil sin tocar el ordenador:
-
-| Orden | Qué hace |
-|---|---|
-| `/arrancar` | Abre el túnel, enciende Pocket Terminal y te manda dirección y contraseña |
-| `/parar` | Cierra Pocket Terminal y el túnel |
-| `/reiniciar` | Lo para y lo vuelve a abrir, con dirección y contraseña nuevas |
-| `/estado` | Dice si está en marcha y repite los datos |
-| `/ayuda` | Lista de órdenes |
-
-Para dejar el bot escuchando desde que inicias sesión en Windows, usa la opción 6 del panel. Registra la tarea `PocketTerminalBot`, sin ventana, y la repite cada cinco minutos por si el proceso se cae. El bot comprueba al arrancar si ya hay otro y se retira, así que las repeticiones no acumulan copias. Su registro está en `.pocket-terminal\bot.log`.
-
-### Claude Code, Git y SSH
-
-Comprueba primero en PowerShell normal que funcionan:
+En PowerShell normal:
 
 ```powershell
 claude --version
@@ -114,138 +105,230 @@ git --version
 ssh -V
 ```
 
-Si solo usabas Claude como extensión, instala también su [CLI oficial para Windows](https://code.claude.com/docs/en/setup) e inicia sesión allí una vez. Desde Pocket Terminal ejecuta `claude` en tu proyecto. Se mantiene la autenticación propia de Claude Code: Pocket Terminal no añade una suscripción ni llama por su cuenta a la API.
+Si solo usabas Claude como extensión de VS Code, instala su [CLI oficial](https://code.claude.com/docs/en/setup) e inicia sesión una vez. Pocket Terminal no añade suscripción ni llama a la API por su cuenta: usa la autenticación que ya tiene Claude Code.
 
-PowerShell hereda el usuario y las variables del proceso del servidor, y carga su perfil habitual. Git, claves SSH y herramientas disponibles para ese usuario funcionan en ese entorno. Reinicia Pocket Terminal si instalas herramientas o cambias el PATH. Las conexiones y ajustes exclusivos de VS Code no se importan. Para un servidor remoto, ejecuta `ssh usuario@servidor` y después Claude allí si lo tienes instalado en ese servidor.
+PowerShell hereda el usuario, las variables y el perfil del proceso del servidor. Reinicia Pocket Terminal si instalas herramientas o cambias el PATH.
+</details>
 
-## 3. Alternativa al túnel: Tailscale
+## Encenderlo desde el móvil
 
-El túnel de Cloudflare es cómodo pero publica una dirección en internet. Si vas a usarlo a diario, **Tailscale** es mejor: la dirección es fija y solo la alcanzan tus propios dispositivos. Usa **Tailscale Serve** para ofrecer la web por HTTPS dentro de tu red privada. No requiere abrir puertos en el router ni desplegar una web en otro servidor.
+Crea un bot hablando con [@BotFather](https://t.me/BotFather), envíale `/newbot` y guarda el token:
 
-1. Instala [Tailscale para Windows](https://tailscale.com/docs/install/windows) y la app de Tailscale en tu móvil. Inicia sesión en la misma cuenta y conecta ambos dispositivos.
-2. Con Pocket Terminal arrancado, ejecuta en PowerShell:
+```powershell
+npm.cmd run telegram -- <token del bot>
+```
 
-   ```powershell
-   tailscale serve --bg http://127.0.0.1:3210
-   ```
+El comando espera a que escribas a tu bot, y así descubre a qué chat responder. Luego deja el bot escuchando desde que inicias sesión en Windows:
 
-3. Sigue las indicaciones de Tailscale para habilitar HTTPS si te lo pide. Copia la URL HTTPS que muestra, por ejemplo `https://tu-pc.tu-red.ts.net`.
-4. Detén Pocket Terminal y fija esa dirección como única de acceso:
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Enable-BotAutostart.ps1
+```
 
-   ```powershell
-   npm.cmd run origin -- https://tu-pc.tu-red.ts.net
-   ```
+A partir de ahí, todo desde el chat:
 
-5. Vuelve a arrancarlo con la opción 2 del panel, que no abre túnel. Con Tailscale activo en el móvil, abre esa dirección y entra con la contraseña que muestre el panel.
+| Orden | Qué hace |
+|---|---|
+| `/arrancar` | Abre el túnel, enciende el servidor y te manda dirección y contraseña |
+| `/parar` | Cierra el servidor y el túnel |
+| `/reiniciar` | Lo para y lo vuelve a abrir, con dirección y contraseña nuevas |
+| `/estado` | Dice si está en marcha y repite los datos |
 
-Después de configurar HTTPS, usa esa misma URL también desde el PC: la autenticación está ligada a un único origen. `localhost` deja de servir como origen de inicio de sesión hasta que vuelvas a configurarlo.
+Con la dirección llegan cuatro botones para esas mismas cuatro acciones, así que no hace falta teclear nada.
 
-En **iPhone**: abre la URL en Safari → Compartir → Añadir a pantalla de inicio. Se abrirá sin la barra habitual del navegador. En Android, usa la opción equivalente de Chrome. La disponibilidad exacta del menú depende del navegador; la web funciona también en una pestaña normal.
+> **Un bot de Telegram es público: cualquiera puede escribirle.** Pocket Terminal solo obedece al chat guardado y descarta el resto sin contestar, de modo que un desconocido no recibe respuesta alguna.
 
-Usa **Serve** para esta configuración privada. Tailscale **Funnel** tiene otra finalidad: publicación en Internet. Documentación: [Serve](https://tailscale.com/docs/features/tailscale-serve) y [comando Serve](https://tailscale.com/docs/reference/tailscale-cli/serve).
+### Desde el ordenador
 
-## El ancho importa: gira el móvil para las tablas
+Doble clic en **`Pocket Terminal.cmd`** abre el panel de control en el navegador. Arriba el estado de cada pieza, debajo los botones.
 
-PowerShell decide el formato de sus tablas según las columnas que tenga la ventana, y **recorta las de la derecha sin avisar** cuando no caben. En `ls` la columna que se pierde es justo el nombre del archivo, así que el listado parece roto.
+<div align="center">
+<img src="docs/capturas/panel-control.png" alt="Panel de control con el estado de cada pieza" width="620" />
+</div>
 
-Medido en un iPhone de 390 px de ancho:
+Sirve para arreglar lo que falle: arrancar con o sin túnel, parar, reiniciar con contraseña nueva, reenviar los datos por Telegram, gestionar el arranque automático, recompilar la web, leer el registro del bot, liberar el puerto si lo ocupa un servidor anterior y cerrar túneles que se hayan quedado sueltos.
+
+**Cerrar el panel no para nada.** El servidor y el túnel siguen por su cuenta.
+
+<details>
+<summary><b>Por qué el panel lo sirve el bot y no el servidor</b></summary>
+
+El panel existe para arrancar el servidor. Si viviera dentro del servidor, te quedarías sin panel justo cuando falla.
+
+Escucha en `127.0.0.1` y en el puerto siguiente al del servidor, el 3211. El túnel apunta al 3210, así que el panel nunca sale a internet. Rechaza las peticiones cuyo `Host` no sea `127.0.0.1` ni `localhost`, y toda acción exige una clave generada al arrancar el bot que el icono pasa en la dirección. Una página web cualquiera no conoce esa clave y, sin cabeceras CORS, tampoco puede leer las respuestas.
+
+El puerto que sirve el panel es además el cerrojo que impide que se arranquen dos bots a la vez.
+</details>
+
+<details>
+<summary><b>Alternativa al túnel: Tailscale</b></summary>
+
+El túnel de Cloudflare da una dirección distinta en cada arranque. Si vas a usarlo a diario, Tailscale da una dirección fija que solo alcanzan tus propios dispositivos.
+
+1. Instala [Tailscale para Windows](https://tailscale.com/docs/install/windows) y la app en el móvil, con la misma cuenta.
+2. Con Pocket Terminal arrancado: `tailscale serve --bg http://127.0.0.1:3210`
+3. Copia la dirección HTTPS y fíjala: `npm.cmd run origin -- https://tu-pc.tu-red.ts.net`
+4. Arranca sin túnel desde el panel, con **Arrancar solo aquí**.
+
+Usa **Serve**, no **Funnel**: Funnel publica en internet, que es justo lo que Tailscale te ahorra.
+</details>
+
+---
+
+## Uso diario
+
+Abres la dirección, pegas la contraseña y ya estás dentro. La pantalla es terminal y teclado, nada más.
+
+<div align="center">
+<img src="docs/capturas/login.png" alt="Pantalla de entrada" width="230" />
+&nbsp;
+<img src="docs/capturas/nueva-terminal.png" alt="Abrir una terminal nueva" width="230" />
+&nbsp;
+<img src="docs/capturas/explorador.png" alt="Explorador de carpetas" width="230" />
+</div>
+
+Todo lo demás vive en un panel que se abre desde la pestaña del borde derecho.
+
+| Control | Qué hace |
+|---|---|
+| Pestaña del borde derecho | Abrir y cerrar el panel |
+| `claude` | Escribe `claude` y lo ejecuta |
+| `claude --resume` | Abre la lista de conversaciones para retomar una |
+| Mando redondo | Arriba avanza en el texto, abajo retrocede. Cuanto más lejos del centro, más rápido |
+| `↓ Final` | Volver al final del texto. Solo aparece si has subido |
+| Ctrl | Aplica Ctrl a la siguiente letra |
+| `^C` | Interrumpe el programa en primer plano |
+| Escribir | Un campo normal para teclear o dictar, y después insertarlo |
+| Pegar | Revisa el portapapeles antes de insertarlo |
+| Explorar | Recorre las carpetas del ordenador sin teclear la ruta |
+| ＋ Carpeta | Crea una carpeta para empezar un proyecto, sin ir al ordenador |
+| `A−` / `A+` | Tamaño de letra, de 12 a 28 px |
+
+**El panel se queda abierto** entre pulsaciones, porque las flechas y Tab se usan en tandas. Se cierra tocando la terminal.
+
+### Varias terminales a la vez
+
+Hasta **ocho**, cada una en su carpeta y con el nombre de esa carpeta. Cambias entre ellas desde el selector del panel.
+
+**Lo que ocurre en las que no estás mirando no se pierde.** El servidor mantiene cada terminal viva y guarda su pantalla y hasta 3.000 líneas de historial, aunque no haya nadie conectado. Al volver a una, aparece todo lo que ha pasado mientras tanto.
+
+Solo un dispositivo controla cada terminal a la vez. Si la abres desde otro sitio, el anterior se desconecta y puede recuperarla con un toque.
+
+### Volver a la app
+
+La web comprueba si la conexión sigue viva antes de rehacerla, y conserva por dónde ibas leyendo. La primera carga trae la pantalla y 500 líneas; el resto del historial se pide solo al llegar al principio.
+
+**La contraseña cambia en cada arranque.** No hay que recordarla: llega por Telegram y aparece en el panel de control.
+
+> **La persistencia cubre cerrar el navegador o perder cobertura.** Reiniciar el servidor, cerrar la sesión de Windows o apagar el PC termina las terminales.
+
+### Instalarlo como app en el iPhone
+
+Safari → Compartir → Añadir a pantalla de inicio. Se abre sin la barra del navegador y con su propio icono. La terminal necesita conexión; sin ella se abre la app y avisa.
+
+El túnel da una dirección nueva en cada arranque, así que para instalarlo como app conviene fijar la dirección con Tailscale.
+
+## El ancho importa
+
+PowerShell decide el formato de sus tablas según las columnas que tenga, y **recorta las de la derecha sin avisar**. En `ls` la columna que se pierde es el nombre del archivo, así que el listado parece roto.
+
+Medido en un iPhone de 390 px:
 
 | Posición | Letra | Columnas | `ls` |
 |---|---|---|---|
-| Vertical | 17 px (por defecto) | 36 | sin nombres |
+| Vertical | 17 px | 36 | sin nombres |
 | Vertical | 12 px | 51 | sin nombres |
 | Horizontal | 13 px | 102 | completo |
 
-Hacen falta unas 70 columnas para que la tabla salga entera. Con menos de 70, Pocket Terminal te avisa una vez y te dice qué hacer: girar el móvil o reducir la letra con `A−`.
+Hacen falta unas 70 columnas. Por debajo, Pocket Terminal avisa una vez y ofrece reducir la letra en el propio aviso. En vertical, `ls -Name` da solo los nombres y cabe de sobra.
 
-En vertical, para ver solo los nombres cabe usar `ls | Format-Table Name`, o `ls -Name`.
+---
 
-## Uso desde el móvil
+## Decisiones y mediciones
 
-**La pantalla es solo terminal.** No hay barra arriba ni botonera abajo: todo lo demás vive en un panel que se abre desde el borde derecho, tocando la pestaña estrecha que hay a media altura. Con el panel cerrado, la terminal ocupa la pantalla entera menos el teclado.
+Todo lo de esta sección está medido en una máquina real, no supuesto.
 
-En un iPhone de 390 px se pasa de 19 a 27 líneas visibles. Con el teclado abierto, de 7 a 13.
+### Agrupar la salida antes de procesarla
 
-El panel **se queda abierto** mientras lo usas, porque las flechas y Tab se pulsan en tandas. Se cierra tocando la terminal o la pestaña. Mientras está abierto se superpone al texto en lugar de encoger la terminal, para que el programa en marcha no repinte la pantalla cada vez.
+ConPTY entrega la salida en trozos de unos **37 bytes**: 39.700 trozos para 1,4 MB. Procesar cada uno por separado en la copia del terminal del servidor, y mandarlo en su propio mensaje, tardaba **605 segundos**. Agrupando lo que llega cada 8 ms:
 
-| Control | Acción |
+| | Trozo a trozo | Agrupado |
+|---|---|---|
+| 1,4 MB de salida | 605 s | **3,7 s** |
+| Mensajes enviados | 39.700 | **431** |
+
+Sin esto, compilar algo o ejecutar `claude` con salida larga dejaba la terminal atascada durante minutos.
+
+### Liberar a mano el hilo de node-pty
+
+node-pty 1.1.0 con `useConptyDll` solo suelta el hilo que lee la consola si llega más salida después de matar la terminal, y nunca cuando la terminal sale sola. Cada terminal cerrada dejaba un hilo vivo que impedía terminar el proceso: `npm test` agotaba el tiempo y cerrar tardaba siempre los 3 segundos de espera máxima. Liberándolo a mano, cerrar pasó a **1,1 s**.
+
+### `process.kill` en vez de `taskkill`
+
+Lanzar `taskkill` tarda **30 segundos** en esta máquina; `process.kill` tarda **1 milisegundo**. Y basta con matar el servidor: ConPTY cierra los PowerShell de las terminales abiertas al desaparecer su consola, comprobado contándolos antes y después. Parar el servicio pasó de 59 s a **24 ms**.
+
+### `tasklist` se cuelga en una consola anidada
+
+Buscar procesos con `tasklist` desde una consola abierta por otra consola no vuelve nunca. El panel en modo texto se quedaba en negro justo por eso. Los túneles sueltos se anotan ahora en un fichero, en vez de preguntárselo a Windows.
+
+### Toda la interfaz en un panel lateral
+
+La barra superior y las dos filas de botones se comían la pantalla:
+
+| | Antes | Ahora |
+|---|---|---|
+| Sin teclado | 19 líneas | **27 líneas** |
+| Con teclado abierto | 7 líneas | **13 líneas** |
+
+Además, las nueve teclas necesitaban 474 px en una fila de 374, así que **la tecla Intro quedaba fuera de la pantalla** sin que nada lo indicara.
+
+### El mando de desplazamiento, y por qué no basta arrastrar el dedo
+
+xterm.js 6 **no trae desplazamiento táctil**: incluye el código de gestos de VS Code pero no lo usa, y ya no existe el elemento con scroll nativo de las versiones antiguas.
+
+Además, Claude Code activa el reporte de ratón completo en formato SGR y se queda con todos los toques que caen sobre la terminal. Por eso el mando vive fuera del área de texto, y decide solo cómo mover:
+
+| Programa | Cómo se desplaza |
 |---|---|
-| Pestaña del borde derecho | Abrir y cerrar el panel de herramientas |
-| Selector del panel | Cambiar entre terminales |
-| `＋ Nueva` | Crear una terminal eligiendo la carpeta. Se llama como la carpeta y ofrece las cinco últimas que usaste |
-| claude | Escribe `claude` y lo ejecuta, sin teclear en el móvil |
-| Sesiones | Ejecuta `claude --resume`, que abre la lista de conversaciones para retomar una |
-| `↓ Final` | Volver al final del texto. Solo aparece si has subido |
-| Explorar | Recorrer las carpetas del ordenador y elegir una, sin teclear la ruta |
-| ＋ Carpeta | Crear una carpeta dentro de la que estás mirando, para empezar un proyecto sin ir al ordenador |
-| Mando redondo | Deslizarlo arriba avanza hacia el final del texto; abajo retrocede. Cuanto más lejos del centro, más rápido. Es la única forma de desplazar: la barra de xterm está oculta para que no se pisen |
-| `A−` / `A+` | Cambiar el tamaño de letra |
-| Teclado | Abrir o cerrar el teclado del teléfono |
-| Ctrl | Aplicar Ctrl a la siguiente letra o carácter compatible |
-| `^C` | Interrumpir el programa en primer plano |
-| Escribir | Escribir o dictar texto en un campo normal y después insertarlo |
-| Pegar | Revisar el portapapeles antes de insertarlo; si el navegador no da acceso, pegar manualmente en el campo |
-| Copiar | Copiar la selección de xterm; la selección táctil depende del navegador |
-| Ajustes → Bloquear acceso | Cerrar la sesión de acceso, conservando las terminales |
-| Ajustes → Cerrar esta terminal | Terminar esa terminal, previa confirmación |
+| PowerShell, Codex | Historial que guarda la propia web |
+| Claude Code | Ruedas de ratón, que es lo que espera recibir |
+| `vim`, `less` | Re Pág y Av Pág |
 
-**Insertar texto no añade Intro automáticamente**, pero un texto con saltos de línea puede ejecutar comandos, según el programa activo y su soporte de pegado entre delimitadores. Revísalo antes de insertarlo. No se guardan el texto auxiliar ni la salida de terminal en el almacenamiento del navegador; solo se recuerdan el tamaño de letra y el identificador de la última sesión.
+---
 
-**El mando redondo elige solo cómo mover el texto.** Con PowerShell o Codex desplaza el historial que guarda la propia web. Claude Code se queda con la pantalla y con el ratón mientras funciona, así que ahí el mando le manda ruedas de ratón y es Claude Code quien mueve su conversación. Con `vim` o `less` manda Re Pág y Av Pág. No hay nada que configurar.
+## Seguridad
 
-Al volver a la app desde el móvil, la web comprueba si la conexión sigue viva antes de rehacerla, y conserva por dónde ibas leyendo. La primera carga trae la pantalla y 500 líneas; el resto del historial se pide solo al llegar al principio.
+Esta aplicación da acceso a una **terminal completa con los permisos de tu usuario**. La carpeta inicial es una comodidad, no un aislamiento.
 
-Solo un dispositivo controla cada terminal a la vez. Si la abres desde otro, el anterior se desconecta para evitar cambios de tamaño y pulsaciones simultáneas. Puedes recuperarla desde **Ajustes → Volver a conectar**.
+- Escucha solo en `127.0.0.1`. El acceso remoto pasa por el túnel HTTPS.
+- Comprueba el origen de cada operación y del WebSocket, además de la cookie.
+- Contraseña con scrypt y sal aleatoria. Tokens aleatorios, revocables y con 12 horas de caducidad.
+- Cookies HttpOnly, SameSite=Strict y Secure con HTTPS.
+- Diez intentos de acceso por minuto, tamaños de entrada limitados, ocho terminales como máximo.
+- El explorador solo devuelve nombres. No abre, no lee, no ejecuta ni cambia ningún archivo.
+- Crear carpetas es la única escritura, solo dentro de una carpeta que ya existe, y el nombre se comprueba a fondo antes de tocar el disco.
+- La copia sin conexión guarda la página y sus archivos compilados. Nunca respuestas de la API, salida de terminal ni la cookie.
+- Salida y pantalla solo en memoria. El servidor no registra pulsaciones ni historial.
+- Sin scripts de terceros ni recursos remotos en la interfaz.
+- La configuración privada y las dependencias quedan fuera del repositorio.
 
-## Inicio automático
+El código puede ser público; tus credenciales no. No es una auditoría de seguridad ni una plataforma multiusuario. Consulta [SECURITY.md](SECURITY.md).
 
-Hay dos tareas posibles, y normalmente solo interesa la primera.
+## Configuración
 
-**`PocketTerminalBot`** deja el bot de Telegram escuchando desde que inicias sesión en Windows, sin ventana y sin arrancar nada por su cuenta. Se registra con la opción 6 del panel, o con `scripts\Enable-BotAutostart.ps1`. Se quita con la opción 7, o con `scripts\Disable-BotAutostart.ps1`. Es lo que permite encender Pocket Terminal desde el móvil sin tocar el ordenador.
+Se guarda en `.pocket-terminal/config.json`, excluido de Git. Usa `npm.cmd run setup` para carpeta y contraseña, y `npm.cmd run origin -- <dirección>` para cambiar solo la dirección.
 
-**`PocketTerminal`** arranca el servidor directamente al iniciar sesión, sin túnel ni contraseña nueva, usando la configuración guardada. Sirve si prefieres tenerlo siempre encendido dentro de tu red con Tailscale:
+| Campo | Qué es |
+|---|---|
+| `port` | Puerto local, 3210 por defecto |
+| `publicOrigin` | Único origen autorizado; HTTPS obligatorio salvo en localhost |
+| `defaultCwd` | Carpeta inicial absoluta |
+| `shell` | `powershell.exe` por defecto; vale `pwsh.exe` |
+| `shellArgs` | Lista JSON de argumentos, `["-NoLogo"]` por defecto |
+| `passwordSalt` / `passwordHash` | Los gestiona el asistente |
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Enable-Autostart.ps1
-```
+La misma carpeta guarda el estado y los registros: `state.json` con los procesos, la dirección y la contraseña en curso; `telegram.json` con el token y el chat; y `bot.log`, `server.log` y `tunnel.log`. El panel y el bot comparten `state.json`, y por eso cualquiera puede parar lo que arrancó el otro.
 
-Ambas tareas se crean para tu usuario, con permisos normales. No guardan tu contraseña de Windows ni configuran inicio de sesión automático. Puede ser necesario autorizar la creación de tareas según la política de tu equipo.
-
-Si cambias la ubicación del proyecto o reinstalas Node en otra ruta, vuelve a registrarlas. El PC debe permanecer encendido y sin suspensión para trabajar a distancia.
-
-## Configuración local
-
-Se guarda en `.pocket-terminal/config.json`, excluido de Git. Usa `npm.cmd run setup` para modificar carpeta o contraseña, y `npm.cmd run origin -- <dirección>` para cambiar solo la dirección de acceso. También puedes editar el archivo con el servidor detenido:
-
-- `port`: puerto local, 3210 por defecto.
-- `publicOrigin`: único origen autorizado; HTTPS obligatorio salvo en localhost para pruebas.
-- `defaultCwd`: carpeta inicial absoluta.
-- `shell`: `powershell.exe` por defecto. Puedes usar `pwsh.exe` si tienes PowerShell 7.
-- `shellArgs`: `['-NoLogo']` por defecto, escrito como una lista JSON con comillas dobles.
-- `passwordSalt` / `passwordHash`: gestionados por el asistente.
-
-Los argumentos se pasan como lista a la terminal, sin concatenar la carpeta en un comando. Reiniciar el servidor invalida todas las cookies de acceso.
-
-Junto al archivo de configuración, la misma carpeta guarda el estado de ejecución y los registros: `state.json` (procesos, dirección y contraseña en curso), `telegram.json` (token y chat del bot), `bot.log`, `server.log` y `tunnel.log`. El panel y el bot leen y escriben `state.json`, y por eso cualquiera de los dos puede parar lo que arrancó el otro. Toda la carpeta queda fuera de Git.
-
-## Seguridad y alcance
-
-Esta aplicación da acceso a una **terminal completa con los permisos de tu usuario**. La carpeta inicial es una comodidad, no un aislamiento. Está pensada para una persona y sus dispositivos de confianza, no para dar terminales a terceros.
-
-- Escucha únicamente en `127.0.0.1`; el acceso remoto se hace mediante el proxy HTTPS de tu red privada.
-- Comprueba el origen de las operaciones y del WebSocket, además de la cookie de acceso.
-- Contraseña con scrypt y sal aleatoria; tokens aleatorios, revocables y con caducidad de 12 horas.
-- Cookies HttpOnly, SameSite=Strict y Secure cuando se configura HTTPS.
-- Límite global de diez intentos de acceso por minuto, tamaños de entrada limitados y máximo de ocho terminales.
-- El explorador de carpetas solo devuelve nombres. No abre, no lee, no ejecuta ni cambia ningún archivo, y su único resultado es la carpeta donde arranca la terminal.
-- La copia sin conexión guarda la página y sus archivos compilados. No guarda respuestas de la API, salida de terminal ni la cookie de acceso.
-- Salida y pantalla solo en memoria; el servidor no registra las pulsaciones ni el historial. PowerShell, Claude y otras herramientas sí pueden guardar su propio historial habitual.
-- Sin scripts de terceros ni recursos remotos en la interfaz. Los archivos del proyecto y la configuración no se sirven como contenido web.
-- La configuración privada, certificados y dependencias se excluyen del repositorio.
-
-El código puede ser público; tus credenciales y configuración real deben seguir fuera de Git. No es una auditoría de seguridad ni una plataforma multiusuario. Consulta [SECURITY.md](SECURITY.md).
-
-## Desarrollo y comprobaciones
+## Desarrollo
 
 ```powershell
 npm.cmd ci
@@ -254,27 +337,30 @@ npm.cmd run build
 npm.cmd test
 ```
 
-Node sirve la compilación de `web/` desde `dist/`. Después de editar la interfaz, vuelve a compilar. El proyecto usa JavaScript, Node HTTP, `ws`, `node-pty`, xterm.js y Vite. La copia de xterm sin interfaz mantiene la pantalla para reconectar; no se intenta reconstruir el chat de Claude.
+| Comando | Qué hace |
+|---|---|
+| `npm run panel` | Panel de control en modo texto |
+| `npm run launch` | Arranca el servicio sin menú |
+| `npm run origin -- <url>` | Cambia la dirección de acceso |
+| `npm run telegram -- <token>` | Configura el bot |
+| `npm run bot` | Arranca el bot en primer plano |
 
-La integración verifica una PTY real: entrada, salida Unicode, cambio de tamaño, Ctrl+C, salida durante desconexión, recuperación, exclusión de control simultáneo y cierre. También verifica autenticación, revocación, origen y límites. GitHub Actions ejecuta las pruebas en Windows y Linux y añade una prueba de PowerShell/ConPTY en Windows.
+Node sirve la compilación de `web/` desde `dist/`. JavaScript, Node HTTP, `ws`, `node-pty`, xterm.js y Vite. Sin marco de trabajo en la interfaz.
 
-**Estado de validación de esta primera versión:** compilación y pruebas disponibles en CI. La experiencia de teclado, dictado, selección y área visible debe comprobarse en tu iPhone concreto. La ejecución en Linux permite comprobar el protocolo y buena parte del servidor; no sustituye la prueba de Windows/ConPTY ni una sesión real de Claude.
+Las **14 pruebas** verifican una PTY real: entrada, salida Unicode, cambio de tamaño, Ctrl+C, salida durante la desconexión, recuperación, exclusión de control simultáneo y cierre. También autenticación, revocación, origen, límites, el explorador de carpetas, la creación de carpetas y la instalación como app. Dos de ellas protegen los arreglos de rendimiento descritos arriba: fallan si alguien los deshace.
 
-Comprobación manual recomendada al instalar: abrir una terminal, ejecutar `claude`, aumentar la letra, abrir/cerrar el teclado, girar la pantalla, mandar Ctrl+C cuando proceda y volver tras bloquear el móvil. No se ha probado la sesión de Claude de tu ordenador desde este entorno.
-
-## Estructura
+GitHub Actions ejecuta todo en Windows y en Linux, más una prueba de PowerShell con ConPTY en Windows.
 
 | Ruta | Contenido |
 |---|---|
-| `Pocket Terminal.cmd` | Panel de control, para abrir con doble clic |
-| `web/` | Interfaz móvil y controles |
+| `Pocket Terminal.cmd` | Abre el panel de control |
+| `web/` | Interfaz del móvil |
 | `server/` | HTTP, autenticación, WebSocket y PTY |
-| `scripts/panel.mjs` | Diagnóstico y menú de acciones |
 | `scripts/runtime.mjs` | Arranque, parada y estado compartido |
+| `scripts/control.mjs` y `control.html` | Panel de control web |
 | `scripts/bot.mjs` | Bot de Telegram |
-| `scripts/` | Configuración y scripts para Windows |
-| `docs/` | Decisiones sobre las funciones del móvil |
+| `scripts/panel.mjs` | Panel de control en texto |
 | `test/` | Pruebas de integración y seguridad |
-| `.github/workflows/ci.yml` | Verificación en Windows y Linux |
+| `docs/` | Decisiones de producto y capturas |
 
-Publicar el repositorio no despliega el servidor: el siguiente paso es instalarlo en tu Windows siguiendo esta guía.
+**Estado**: en uso diario sobre Windows 11 y iPhone. La experiencia de teclado, dictado y selección depende del navegador de cada teléfono, y conviene comprobarla en el tuyo.
