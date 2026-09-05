@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { createServer } from 'node:net';
@@ -201,6 +201,27 @@ test('the app installs as a PWA and keeps a copy of itself for offline starts', 
   // The page is not an asset however the request spells its path, so a browser
   // must never keep it for a year.
   assert.equal((await f.request('/assets/..%2findex.html')).headers.get('cache-control'), 'no-store');
+});
+
+test('the picker creates a folder and refuses any name that could escape it', async t => {
+  const f = await fixture(t); const cookie = await f.login();
+  const crear = (name, parent = f.cwd) => f.request('/api/mkdir', { cookie, method: 'POST', body: JSON.stringify({ parent, name }) });
+
+  assert.equal((await f.request('/api/mkdir', { method: 'POST', body: '{}' })).status, 401);
+  assert.equal((await f.request('/api/mkdir', { cookie, method: 'POST', origin: 'https://attacker.example', body: '{}' })).status, 403);
+
+  const hecha = await crear('mi proyecto');
+  assert.equal(hecha.status, 201);
+  assert.equal((await hecha.json()).path, join(f.cwd, 'mi proyecto'));
+  assert.ok((await stat(join(f.cwd, 'mi proyecto'))).isDirectory());
+  assert.equal((await crear('mi proyecto')).status, 409);
+
+  // The name is the only part the browser chooses, so nothing that climbs out
+  // of the parent or that Windows itself refuses may reach the disk.
+  for (const name of ['..', '.', '', '   ', 'con', 'CON.txt', 'aux', 'acaba.', 'a\\b', 'a/b', 'C:', 'a*b', 'a?b', 'a<b', 'a|b', 'a"b', 'x'.repeat(200)]) {
+    assert.equal((await crear(name)).status, 400, `Se aceptó el nombre ${JSON.stringify(name)}`);
+  }
+  assert.deepEqual((await readdir(f.cwd)).sort(), ['mi proyecto']);
 });
 
 test('a protected folder is reported as protected, not as missing', { skip: process.platform !== 'win32' }, async t => {

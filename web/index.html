@@ -127,7 +127,12 @@
       <div class="browse-actions">
         <button type="button" id="browse-up">↑ Subir</button>
         <button type="button" id="browse-roots">Unidades</button>
+        <button type="button" id="browse-new">＋ Carpeta</button>
       </div>
+      <form id="browse-new-form" class="field-row" hidden>
+        <input id="browse-new-name" maxlength="100" placeholder="Nombre de la carpeta" autocomplete="off" autocapitalize="off" spellcheck="false" />
+        <button type="submit" id="browse-new-create">Crear</button>
+      </form>
       <p id="browse-error" class="error" role="alert"></p>
       <ul id="browse-list" class="browse-list" aria-label="Contenido de la carpeta"></ul>
       <p class="footnote">Solo se muestran los nombres. Los archivos no se abren ni se ejecutan.</p>

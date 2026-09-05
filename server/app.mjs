@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { resolve, sep, extname, dirname, isAbsolute, join } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { Auth } from './auth.mjs';
@@ -77,6 +77,36 @@ async function browse(requested, config) {
   return { path, parent: parent === path ? null : parent, sep, entries, truncated: found.length > BROWSE_LIMIT, roots: await roots() };
 }
 
+// Creating a folder is the one write the picker allows, and only inside a
+// folder that already exists. The name is checked hard because it is the only
+// part the browser chooses: anything that could climb out of the parent, or
+// that Windows itself refuses, is rejected before touching the disk.
+const RESERVADOS = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i;
+async function makeFolder(parent, name, config) {
+  if (typeof name !== 'string') throw Object.assign(new Error('Falta el nombre de la carpeta.'), { status: 400 });
+  const limpio = name.trim();
+  const malo = !limpio || limpio.length > 100
+    || /[\\/:*?"<>|]/.test(limpio)
+    || /[\x00-\x1f]/.test(limpio)
+    || limpio === '.' || limpio === '..'
+    || /[. ]$/.test(limpio)
+    || RESERVADOS.test(limpio);
+  if (malo) throw Object.assign(new Error('Ese nombre no vale. Evita \\ / : * ? " < > | y no lo acabes en punto.'), { status: 400 });
+
+  const base = await browse(parent, config);
+  const path = join(base.path, limpio);
+  // The parent came back from realpath, so a name that stays inside it cannot
+  // point anywhere else; this only catches a surprise from the platform.
+  if (dirname(path) !== base.path) throw Object.assign(new Error('Ese nombre no vale.'), { status: 400 });
+  try { await mkdir(path); }
+  catch (error) {
+    if (error.code === 'EEXIST') throw Object.assign(new Error('Ya hay algo con ese nombre en esta carpeta.'), { status: 409 });
+    if (error.code === 'EPERM' || error.code === 'EACCES') throw Object.assign(new Error('No tienes permiso para crear aquí.'), { status: 403 });
+    throw Object.assign(new Error('No se pudo crear la carpeta.'), { status: 400 });
+  }
+  return { path };
+}
+
 export function createApp(config) {
   const assetsPath = resolve(config.distPath, 'assets') + sep;
   const auth = new Auth(config);
@@ -107,6 +137,10 @@ export function createApp(config) {
         }
         if (req.method === 'GET' && url.pathname === '/api/browse') {
           return json(res, 200, await browse(url.searchParams.get('path'), config));
+        }
+        if (req.method === 'POST' && url.pathname === '/api/mkdir') {
+          const body = await readJson(req);
+          return json(res, 201, await makeFolder(body.parent, body.name, config));
         }
         if (req.method === 'POST' && url.pathname === '/api/logout') {
           const token = auth.token(req);

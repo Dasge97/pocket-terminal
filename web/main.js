@@ -307,6 +307,7 @@ function browseRow(icon, label, open) {
   return item;
 }
 async function openFolder(path, fallback = true) {
+  $('browse-new-form').hidden = true;
   $('browse-error').textContent = ''; $('browse-path').textContent = 'Cargando…';
   $('browse-pick').disabled = true; $('browse-up').disabled = true; $('browse-list').replaceChildren();
   try {
@@ -343,6 +344,26 @@ $('browse-pick').onclick = () => {
   $('session-cwd').value = browsePath;
   $('browse-dialog').close();
 };
+// Crear la carpeta aquí evita tener que entrar al ordenador solo para eso, que
+// es lo que hacía falta para empezar un proyecto nuevo desde el móvil.
+$('browse-new').onclick = () => {
+  const caja = $('browse-new-form');
+  caja.hidden = !caja.hidden || !browsePath;
+  $('browse-error').textContent = browsePath ? '' : 'Entra primero en una carpeta.';
+  if (!caja.hidden) { $('browse-new-name').value = ''; $('browse-new-name').focus(); }
+};
+$('browse-new-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const name = $('browse-new-name').value.trim();
+  if (!name || !browsePath) return;
+  $('browse-new-create').disabled = true; $('browse-error').textContent = '';
+  try {
+    const { path } = await api('/mkdir', { method: 'POST', body: JSON.stringify({ parent: browsePath, name }) });
+    $('browse-new-form').hidden = true;
+    await openFolder(path, false);
+  } catch (error) { $('browse-error').textContent = error.message; }
+  finally { $('browse-new-create').disabled = false; }
+});
 document.querySelectorAll('[data-close]').forEach(button => { button.onclick = () => $(button.dataset.close).close(); });
 $('settings-button').onclick = () => $('settings-dialog').showModal();
 function setFont(value) {

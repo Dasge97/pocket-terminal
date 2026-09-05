@@ -177,6 +177,7 @@ El panel **se queda abierto** mientras lo usas, porque las flechas y Tab se puls
 | Sesiones | Ejecuta `claude --resume`, que abre la lista de conversaciones para retomar una |
 | `↓ Final` | Volver al final del texto. Solo aparece si has subido |
 | Explorar | Recorrer las carpetas del ordenador y elegir una, sin teclear la ruta |
+| ＋ Carpeta | Crear una carpeta dentro de la que estás mirando, para empezar un proyecto sin ir al ordenador |
 | Mando redondo | Deslizarlo arriba avanza hacia el final del texto; abajo retrocede. Cuanto más lejos del centro, más rápido. Es la única forma de desplazar: la barra de xterm está oculta para que no se pisen |
 | `A−` / `A+` | Cambiar el tamaño de letra |
 | Teclado | Abrir o cerrar el teclado del teléfono |
