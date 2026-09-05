@@ -56,7 +56,12 @@ async function browse(requested, config) {
   }
   let path;
   try { path = await realpath(resolve(requested || config.defaultCwd)); }
-  catch { throw Object.assign(new Error('No se encuentra esa carpeta en tu ordenador.'), { status: 404 }); }
+  catch (error) {
+    // A protected folder does exist; saying it is missing sends the user looking
+    // for a mistake that is not there.
+    if (error.code === 'EPERM' || error.code === 'EACCES') throw Object.assign(new Error('No tienes permiso para ver esta carpeta.'), { status: 403 });
+    throw Object.assign(new Error('No se encuentra esa carpeta en tu ordenador.'), { status: 404 });
+  }
   if (!(await stat(path)).isDirectory()) throw Object.assign(new Error('La ruta no es una carpeta.'), { status: 400 });
   let found;
   try { found = await readdir(path, { withFileTypes: true }); }
@@ -73,6 +78,7 @@ async function browse(requested, config) {
 }
 
 export function createApp(config) {
+  const assetsPath = resolve(config.distPath, 'assets') + sep;
   const auth = new Auth(config);
   const sessions = new Sessions(config);
   const allowedHosts = new Set([new URL(config.publicOrigin).host, `localhost:${config.port}`, `127.0.0.1:${config.port}`]);
@@ -132,8 +138,10 @@ export function createApp(config) {
         res.writeHead(200, {
           ...pageHeaders,
           // Built assets carry a content hash in their name, so a cached copy is
-          // always the right one. Everything else must stay fresh.
-          'Cache-Control': pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-store',
+          // always the right one. Everything else must stay fresh. The decision
+          // uses the resolved path: `/assets/..%2findex.html` asks for a file
+          // that is not an asset at all.
+          'Cache-Control': path.startsWith(assetsPath) ? 'public, max-age=31536000, immutable' : 'no-store',
           'Content-Type': types[extname(path)] || 'application/octet-stream', 'Content-Length': content.length,
         });
         res.end(req.method === 'HEAD' ? undefined : content);

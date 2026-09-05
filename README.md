@@ -141,6 +141,22 @@ En **iPhone**: abre la URL en Safari → Compartir → Añadir a pantalla de ini
 
 Usa **Serve** para esta configuración privada. Tailscale **Funnel** tiene otra finalidad: publicación en Internet. Documentación: [Serve](https://tailscale.com/docs/features/tailscale-serve) y [comando Serve](https://tailscale.com/docs/reference/tailscale-cli/serve).
 
+## El ancho importa: gira el móvil para las tablas
+
+PowerShell decide el formato de sus tablas según las columnas que tenga la ventana, y **recorta las de la derecha sin avisar** cuando no caben. En `ls` la columna que se pierde es justo el nombre del archivo, así que el listado parece roto.
+
+Medido en un iPhone de 390 px de ancho:
+
+| Posición | Letra | Columnas | `ls` |
+|---|---|---|---|
+| Vertical | 17 px (por defecto) | 36 | sin nombres |
+| Vertical | 12 px | 51 | sin nombres |
+| Horizontal | 13 px | 102 | completo |
+
+Hacen falta unas 70 columnas para que la tabla salga entera. Con menos de 70, Pocket Terminal te avisa una vez y te dice qué hacer: girar el móvil o reducir la letra con `A−`.
+
+En vertical, para ver solo los nombres cabe usar `ls | Format-Table Name`, o `ls -Name`.
+
 ## Uso desde el móvil
 
 | Control | Acción |

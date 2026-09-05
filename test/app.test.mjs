@@ -198,6 +198,18 @@ test('the app installs as a PWA and keeps a copy of itself for offline starts', 
   const asset = html.match(/\/assets\/[\w.-]+\.js/)?.[0];
   assert.ok(asset, 'No se encontró ningún archivo compilado en la página.');
   assert.match((await f.request(asset)).headers.get('cache-control'), /immutable/);
+  // The page is not an asset however the request spells its path, so a browser
+  // must never keep it for a year.
+  assert.equal((await f.request('/assets/..%2findex.html')).headers.get('cache-control'), 'no-store');
+});
+
+test('a protected folder is reported as protected, not as missing', { skip: process.platform !== 'win32' }, async t => {
+  const f = await fixture(t); const cookie = await f.login();
+  const protegida = 'C:\\Windows\\System32\\config';
+  const res = await f.request(`/api/browse?path=${encodeURIComponent(protegida)}`, { cookie });
+  // Saying it does not exist sends the user looking for a mistake that is not there.
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).error, /permiso/);
 });
 
 test('the folder picker lists names only and refuses anything that is not a folder', async t => {

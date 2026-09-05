@@ -43,13 +43,25 @@ function viewport() {
   resize();
 }
 let resizeFrame;
+// PowerShell lays its tables out for the width it is told it has, and quietly
+// drops the columns on the right when they do not fit. Below this many columns
+// `ls` stops showing the file names at all, which looks like a broken listing
+// rather than a window that is too narrow.
+const COMFORTABLE_COLS = 70;
+let warnedNarrow = false;
+function checkWidth() {
+  if (term.cols >= COMFORTABLE_COLS) { warnedNarrow = false; return; }
+  if (warnedNarrow) return;
+  warnedNarrow = true;
+  notice(`Solo caben ${term.cols} columnas. PowerShell recortará las tablas: en «ls» se pierden los nombres. Gira el móvil o reduce la letra con A−.`);
+}
 function resize() {
   cancelAnimationFrame(resizeFrame);
   resizeFrame = requestAnimationFrame(() => {
     if (!opened || $('terminal').hidden || restoring) return;
     try {
       fit.fit();
-      if (online && !exited) send({ type: 'resize', cols: term.cols, rows: term.rows });
+      if (online && !exited) { send({ type: 'resize', cols: term.cols, rows: term.rows }); checkWidth(); }
     } catch { /* Hidden surfaces have no measurable cells yet. */ }
   });
 }
