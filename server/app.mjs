@@ -41,6 +41,11 @@ export function createApp(config) {
   const allowedHosts = new Set([new URL(config.publicOrigin).host, `localhost:${config.port}`, `127.0.0.1:${config.port}`]);
   const hostOK = req => allowedHosts.has(req.headers.host);
   const originOK = req => req.headers.origin === config.publicOrigin;
+  const pageHeaders = {
+    ...securityHeaders,
+    // Some mobile browsers do not include WebSockets in connect-src 'self'.
+    'Content-Security-Policy': securityHeaders['Content-Security-Policy'].replace("connect-src 'self'", `connect-src 'self' ${config.publicOrigin.replace(/^http/, 'ws')}`),
+  };
   const server = createServer(async (req, res) => {
     try {
       if (!hostOK(req)) return json(res, 403, { error: 'Host no permitido.' });
@@ -84,7 +89,7 @@ export function createApp(config) {
       try {
         if (!(await stat(path)).isFile()) throw new Error();
         const content = await readFile(path);
-        res.writeHead(200, { ...securityHeaders, 'Content-Type': types[extname(path)] || 'application/octet-stream', 'Content-Length': content.length });
+        res.writeHead(200, { ...pageHeaders, 'Content-Type': types[extname(path)] || 'application/octet-stream', 'Content-Length': content.length });
         res.end(req.method === 'HEAD' ? undefined : content);
       } catch { json(res, 404, { error: 'Archivo no encontrado. Ejecuta npm run build si aún no has compilado la web.' }); }
     } catch (error) {

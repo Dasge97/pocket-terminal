@@ -9,7 +9,7 @@
     "setup": "node scripts/setup.mjs",
     "build": "vite build",
     "start": "node server/index.mjs",
-    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "test": "node --test --test-timeout=30000 --test-concurrency=1 test/*.test.mjs",
     "check": "node --check server/index.mjs && node --check server/app.mjs && node --check server/sessions.mjs && node --check web/main.js"
   },
   "dependencies": {

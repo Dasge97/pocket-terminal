@@ -68,6 +68,7 @@ test('authentication, CSRF, cookie, private files and request limits', async t =
   const page = await f.request('/');
   assert.equal(page.status, 200); assert.match(await page.text(), /Pocket Terminal/);
   assert.match(page.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.ok(page.headers.get('content-security-policy').includes(f.origin.replace('http:', 'ws:')));
   const manifest = await f.request('/manifest.webmanifest'); assert.equal(manifest.status, 200);
   const source = await readFile('web/main.js', 'utf8'); assert.ok(!source.includes('innerHTML'));
   assert.equal((await f.request('/api/logout', { cookie, method: 'POST', body: '{}' })).status, 200);
