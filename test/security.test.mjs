@@ -189,7 +189,11 @@ test('los ficheros de datos se protegen con ACL en Windows', { skip: process.pla
   // lo que interesa son los permisos, no dónde está el archivo.
   const salida = spawnSync('icacls', [fichero], { encoding: 'utf8' }).stdout;
   const permisos = salida.split('\n').map(l => l.replace(fichero, '')).join('\n');
-  assert.ok(!/BUILTIN|NT AUTHORITY|Everyone|Todos/i.test(permisos), `quedan permisos heredados:\n${salida}`);
+  // Lo que se comprueba es que ninguna otra cuenta del equipo pueda leerlo.
+  // Administradores y SYSTEM no se miran: en Windows pueden tomar posesión de
+  // cualquier fichero, así que su ausencia no demostraría nada.
+  assert.ok(!/Everyone|Todos|Authenticated Users|Usuarios autenticados|BUILTIN\\(Users|Usuarios)/i.test(permisos),
+    `otras cuentas del equipo siguen teniendo acceso:\n${salida}`);
   assert.match(permisos, /:\(F\)/, `el dueño no tiene control total:\n${salida}`);
   assert.equal((await ensureDataDir()).ok, true, 'no se pudo proteger la carpeta de datos');
 });

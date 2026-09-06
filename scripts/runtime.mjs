@@ -37,10 +37,20 @@ export function protectPath(target, { directory = false } = {}) {
     ? `${process.env.USERDOMAIN ? `${process.env.USERDOMAIN}\\` : ''}${process.env.USERNAME}`
     : null;
   if (!user) return { ok: false, error: 'no sé qué usuario es el dueño' };
-  // /inheritance:r corta lo heredado y /grant:r deja al usuario como único
-  // permiso, en una sola llamada para no quedarse sin acceso por el camino.
+  // /inheritance:r corta lo heredado y /grant:r deja al usuario, en una sola
+  // llamada para no quedarse sin acceso por el camino. Pero /inheritance:r no
+  // toca los permisos puestos a mano en el fichero, y hay carpetas temporales y
+  // perfiles corporativos que los traen, así que además se quitan los grupos
+  // que meterían a otras cuentas del equipo. Se nombran por SID porque el
+  // nombre cambia con el idioma de Windows: Users es Usuarios en español.
   const permisos = directory ? `${user}:(OI)(CI)(F)` : `${user}:(F)`;
-  const r = spawnSync('icacls', [target, '/inheritance:r', '/grant:r', permisos], { stdio: 'ignore', windowsHide: true });
+  const otrasCuentas = ['*S-1-5-32-545', '*S-1-1-0', '*S-1-5-11'];
+  const r = spawnSync('icacls', [
+    target, '/inheritance:r', '/grant:r', permisos,
+    ...otrasCuentas.flatMap(sid => ['/remove:g', sid]),
+  ], { stdio: 'ignore', windowsHide: true });
+  // Administradores y SYSTEM se quedan a propósito: pueden tomar posesión de
+  // cualquier fichero, así que quitarlos no protege nada y rompe las copias.
   return { ok: r.status === 0, error: r.status === 0 ? null : `icacls devolvió ${r.status}` };
 }
 
