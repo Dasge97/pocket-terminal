@@ -270,7 +270,11 @@ export async function startService({ localOnly = false, log = () => {} } = {}) {
   const password = newPassword();
   Object.assign(raw, await hashPassword(password), { publicOrigin: url });
   validateConfig(raw);
+  await ensureDataDir();
   await writeFile(configPath, JSON.stringify(raw, null, 2) + '\n', { mode: 0o600 });
+  // config.json guarda la sal y el hash de la contraseña, así que se protege
+  // igual que state.json, que guarda la contraseña en claro.
+  protectPath(configPath);
 
   log('Arrancando Pocket Terminal…');
   const server = await spawnDetached(process.execPath, [resolve(projectRoot, 'server/index.mjs')], serverLogPath);
