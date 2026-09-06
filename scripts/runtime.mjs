@@ -28,14 +28,36 @@ export async function configPort() { try { return (await readConfig()).port ?? 3
 // bound at all, acts as the single-instance lock for the bot.
 export const botLockPort = port => port + 1;
 
+// El modo 0600 de Node no separa propietario, grupo y resto en Windows: lo que
+// manda ahí son las ACL heredadas de la carpeta. Sin esto, quién puede leer los
+// secretos depende de dónde esté clonado el proyecto.
+export function protectPath(target, { directory = false } = {}) {
+  if (process.platform !== 'win32') return { ok: true, skipped: 'no es Windows' };
+  const user = process.env.USERNAME
+    ? `${process.env.USERDOMAIN ? `${process.env.USERDOMAIN}\\` : ''}${process.env.USERNAME}`
+    : null;
+  if (!user) return { ok: false, error: 'no sé qué usuario es el dueño' };
+  // /inheritance:r corta lo heredado y /grant:r deja al usuario como único
+  // permiso, en una sola llamada para no quedarse sin acceso por el camino.
+  const permisos = directory ? `${user}:(OI)(CI)(F)` : `${user}:(F)`;
+  const r = spawnSync('icacls', [target, '/inheritance:r', '/grant:r', permisos], { stdio: 'ignore', windowsHide: true });
+  return { ok: r.status === 0, error: r.status === 0 ? null : `icacls devolvió ${r.status}` };
+}
+
+export async function ensureDataDir() {
+  await mkdir(dataDir, { recursive: true, mode: 0o700 });
+  return protectPath(dataDir, { directory: true });
+}
+
 /* ---------- estado compartido entre el panel y el bot ---------- */
 
 export async function readState() {
   try { return JSON.parse(await readFile(statePath, 'utf8')); } catch { return null; }
 }
 async function writeState(state) {
-  await mkdir(dirname(statePath), { recursive: true, mode: 0o700 });
+  await ensureDataDir();
   await writeFile(statePath, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
+  protectPath(statePath);
 }
 async function clearState() { await rm(statePath, { force: true }); }
 
@@ -43,10 +65,10 @@ async function clearState() { await rm(statePath, { force: true }); }
 // the user visits could still POST to it. A token that only the launcher knows
 // keeps those requests out: a foreign page can neither read it nor set the
 // header that carries it.
-export async function writeControlToken() {
-  const token = randomBytes(24).toString('hex');
-  await mkdir(dataDir, { recursive: true, mode: 0o700 });
+export async function writeControlToken(token = randomBytes(24).toString('hex')) {
+  await ensureDataDir();
   await writeFile(controlPath, JSON.stringify({ token }), { mode: 0o600 });
+  protectPath(controlPath);
   return token;
 }
 export async function readControlToken() {
@@ -54,7 +76,7 @@ export async function readControlToken() {
 }
 
 export async function writeBotPid() {
-  await mkdir(dataDir, { recursive: true, mode: 0o700 });
+  await ensureDataDir();
   await writeFile(botPidPath, JSON.stringify({ pid: process.pid }), { mode: 0o600 });
 }
 export async function readBotPid() {
@@ -99,13 +121,44 @@ export async function readTelegram() {
   } catch { return null; }
 }
 
+// Configurable solo para poder probar el bot contra una API simulada; en uso
+// normal siempre apunta a Telegram.
+export const telegramApi = () => process.env.POCKET_TELEGRAM_API || 'https://api.telegram.org';
+
 export async function telegramCall(botToken, method, payload) {
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, payload
+  const response = await fetch(`${telegramApi()}/bot${botToken}/${method}`, payload
     ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
     : undefined);
   const body = await response.json();
   if (!body.ok) throw new Error(body.description);
   return body.result;
+}
+
+// Quién manda. Autorizar un chat no basta: en un grupo, cualquier miembro
+// hereda el permiso. La orden tiene que venir de la persona vinculada y por
+// mensaje privado, así que las dos cosas se comprueban por separado.
+export function ownerCheck(settings) {
+  const chatId = String(settings.chatId);
+  const ownerId = settings.ownerId === undefined ? null : String(settings.ownerId);
+  return {
+    // Una vinculación anterior a la verificación de identidad no tiene dueño
+    // guardado, y no hay forma de saber quién lo era: obliga a revincular.
+    needsRebind: ownerId === null,
+    allowsMessage: message => Boolean(
+      ownerId
+      && message?.chat?.type === 'private'
+      && String(message.chat.id) === chatId
+      && String(message.from?.id ?? '') === ownerId,
+    ),
+    // Un callback sin chat no se puede situar, así que se rechaza en vez de
+    // caer en el identificador del remitente como hacía antes.
+    allowsCallback: query => Boolean(
+      ownerId
+      && query?.message?.chat?.type === 'private'
+      && String(query.message.chat.id) === chatId
+      && String(query.from?.id ?? '') === ownerId,
+    ),
+  };
 }
 
 export async function say(settings, text, extra = {}) {

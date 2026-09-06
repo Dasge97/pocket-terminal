@@ -1,52 +1,133 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { randomInt } from 'node:crypto';
+import { createInterface, emitKeypressEvents } from 'node:readline';
+import { dirname } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { projectRoot } from '../server/config.mjs';
+import { protectPath, telegramApi, telegramPath } from './runtime.mjs';
 
-const telegramPath = resolve(projectRoot, '.pocket-terminal/telegram.json');
+const VIGENCIA_MS = 5 * 60 * 1000;
+const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-async function call(botToken, method) {
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`);
+async function call(botToken, method, params = {}) {
+  const url = new URL(`${telegramApi()}/bot${botToken}/${method}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
+  const response = await fetch(url);
   const body = await response.json();
   if (!body.ok) throw new Error(`Telegram rechazó la petición: ${body.description}`);
   return body.result;
 }
 
-// The chat id is never shown in Telegram's interface, so it has to be read from
-// a message the user sends to their own bot. Wait for one instead of failing.
-async function waitForChat(botToken, seconds) {
-  const deadline = Date.now() + seconds * 1000;
+function question(text) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => rl.question(text, answer => { rl.close(); resolve(answer.trim()); }));
+}
+
+// El token no puede ir como argumento: queda en el historial de la consola y en
+// la lista de procesos, donde lo ve cualquier programa del equipo.
+function secret(text) {
+  if (!process.stdin.isTTY) throw new Error('Ejecuta la vinculación en una terminal interactiva.');
+  process.stdout.write(text); emitKeypressEvents(process.stdin); process.stdin.setRawMode(true); process.stdin.resume();
+  return new Promise((resolve, reject) => {
+    let value = '';
+    const done = error => {
+      process.stdin.off('keypress', onKey); process.stdin.setRawMode(false); process.stdin.pause(); process.stdout.write('\n');
+      if (error) reject(error); else resolve(value.trim());
+    };
+    const onKey = (text, key = {}) => {
+      if (key.ctrl && key.name === 'c') return done(new Error('Vinculación cancelada.'));
+      if (key.name === 'return' || key.name === 'enter') return done();
+      if (key.name === 'backspace') { value = [...value].slice(0, -1).join(''); return; }
+      if (!key.ctrl && !key.meta && text && !/[\x00-\x1f\x7f]/.test(text)) value += text;
+    };
+    process.stdin.on('keypress', onKey);
+  });
+}
+
+// Cualquiera que conozca el nombre del bot puede escribirle mientras se
+// vincula. Sin un código que solo está en esta pantalla, el instalador se
+// quedaba con el último mensaje llegado, viniera de quien viniera.
+export function newCode() {
+  return Array.from({ length: 8 }, () => ALFABETO[randomInt(ALFABETO.length)]).join('');
+}
+
+// Las actualizaciones que ya estaban en cola son de antes de generar el código,
+// así que se confirman y se tiran antes de empezar a escuchar.
+export async function dropPending(botToken) {
+  const updates = await call(botToken, 'getUpdates', { timeout: 0 });
+  if (!updates.length) return 0;
+  const next = updates.at(-1).update_id + 1;
+  await call(botToken, 'getUpdates', { offset: next, timeout: 0 });
+  return next;
+}
+
+// Solo vale un mensaje privado que traiga el código. Un grupo, un canal o un
+// mensaje de otra persona no vinculan nada.
+export async function waitForOwner(botToken, code, { offset = 0, deadline, onWait } = {}) {
+  let next = offset;
   while (Date.now() < deadline) {
-    const updates = await call(botToken, 'getUpdates');
-    const chats = updates.map(u => u.message?.chat ?? u.channel_post?.chat).filter(Boolean);
-    if (chats.length) return chats.at(-1);
-    await delay(2000);
+    const updates = await call(botToken, 'getUpdates', { offset: next, timeout: 0 });
+    for (const update of updates) {
+      next = update.update_id + 1;
+      const message = update.message;
+      if (!message?.text || !message.text.toUpperCase().includes(code)) continue;
+      if (message.chat?.type !== 'private') { onWait?.('El código llegó por un grupo o canal. Escríbeme por privado.'); continue; }
+      if (!message.from?.id) continue;
+      return { chatId: String(message.chat.id), ownerId: String(message.from.id), from: message.from };
+    }
+    await delay(1500);
   }
   return null;
 }
 
-try {
-  const botToken = process.argv[2];
-  if (!botToken) throw new Error('Uso: npm run telegram -- <token del bot>\n\nPara conseguir el token: abre Telegram, habla con @BotFather, envía /newbot y sigue los pasos.');
+async function main() {
+  const anterior = await readFile(telegramPath, 'utf8').then(t => JSON.parse(t), () => null);
+  if (anterior?.ownerId) {
+    console.log('\nYa hay una vinculación activa.');
+    console.log(`Bot en el chat ${anterior.chatId}, a nombre de ${anterior.ownerName ?? 'un usuario'} (id ${anterior.ownerId}).`);
+    const respuesta = await question('Escribe SUSTITUIR para reemplazarla, o Intro para dejarla como está: ');
+    if (respuesta !== 'SUSTITUIR') { console.log('No se ha cambiado nada.'); return; }
+  }
+
+  const botToken = process.argv[2] || await secret('\nPega el token de BotFather (no se verá al escribirlo): ');
+  if (!botToken) throw new Error('Sin token no puedo vincular nada.');
   if (!/^\d+:[\w-]{30,}$/.test(botToken)) throw new Error('Un token de BotFather tiene la forma 1234567890:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+  if (process.argv[2]) console.log('\nAviso: pasar el token como argumento lo deja en el historial de la consola. Mejor ejecuta `npm run telegram` sin argumentos.');
 
   const bot = await call(botToken, 'getMe');
+  const code = newCode();
+  const offset = await dropPending(botToken);
+
   console.log(`\nBot encontrado: @${bot.username}`);
-  console.log(`\nAbre Telegram, busca @${bot.username}, pulsa Iniciar y escríbele cualquier cosa.`);
-  console.log('Esperando tu mensaje (90 segundos)…\n');
+  console.log('\n  ┌──────────────────────────────┐');
+  console.log(`  │   Código de vinculación:  ${code}  │`);
+  console.log('  └──────────────────────────────┘');
+  console.log(`\nAbre Telegram, escribe por privado a @${bot.username} y mándale ese código.`);
+  console.log('Caduca en 5 minutos y solo sirve una vez.\n');
 
-  const chat = await waitForChat(botToken, 90);
-  if (!chat) throw new Error('No llegó ningún mensaje. Escribe al bot y vuelve a ejecutar el comando.');
-  const nombre = chat.title || [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || 'tu chat';
+  const dueño = await waitForOwner(botToken, code, {
+    offset, deadline: Date.now() + VIGENCIA_MS,
+    onWait: aviso => console.log(`  ${aviso}`),
+  });
+  if (!dueño) throw new Error('El código ha caducado sin recibirse. Vuelve a ejecutar la vinculación.');
 
+  const nombre = [dueño.from.first_name, dueño.from.last_name].filter(Boolean).join(' ') || dueño.from.username || 'tu cuenta';
   await mkdir(dirname(telegramPath), { recursive: true, mode: 0o700 });
-  await writeFile(telegramPath, JSON.stringify({ botToken, chatId: String(chat.id) }, null, 2) + '\n', { mode: 0o600 });
+  await writeFile(telegramPath, JSON.stringify({
+    botToken, chatId: dueño.chatId, ownerId: dueño.ownerId, ownerName: nombre, boundAt: new Date().toISOString(),
+  }, null, 2) + '\n', { mode: 0o600 });
+  await protectPath(telegramPath);
 
-  const prueba = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+  const prueba = await fetch(`${telegramApi()}/bot${botToken}/sendMessage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chat.id, text: 'Pocket Terminal ya puede avisarte por aquí.' }),
+    body: JSON.stringify({ chat_id: dueño.chatId, text: 'Pocket Terminal queda vinculado a esta cuenta. Solo obedecerá a tus mensajes privados.' }),
   });
   const resultado = await prueba.json();
-  console.log(`Telegram configurado para ${nombre}.`);
-  console.log(resultado.ok ? 'Mensaje de prueba enviado. Míralo en Telegram.' : `No se pudo enviar el mensaje de prueba: ${resultado.description}`);
-} catch (error) { console.error(`\n${error.message}\n`); process.exitCode = 1; }
+  console.log(`\nVinculado con ${nombre} (id ${dueño.ownerId}).`);
+  console.log(resultado.ok ? 'Mensaje de confirmación enviado.' : `No se pudo enviar la confirmación: ${resultado.description}`);
+  console.log('Reinicia el bot para que tome la vinculación nueva.');
+}
+
+// Importado desde las pruebas: solo se ejecuta al llamarlo como programa.
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/').split('/').at(-1))) {
+  try { await main(); } catch (error) { console.error(`\n${error.message}\n`); process.exitCode = 1; }
+}

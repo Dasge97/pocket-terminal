@@ -1,7 +1,7 @@
 import { appendFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startControlServer } from './control.mjs';
-import { announce, BOTONERA, botLockPort, botLogPath, configPort, readTelegram, say, startService, status, stopService, telegramCall, writeBotPid } from './runtime.mjs';
+import { announce, BOTONERA, botLockPort, botLogPath, configPort, ownerCheck, readTelegram, say, startService, status, stopService, telegramCall, writeBotPid } from './runtime.mjs';
 
 // Started by the scheduled task there is no console to read, so keep a file.
 const stamp = () => new Date().toLocaleString('es-ES');
@@ -25,15 +25,23 @@ if (!control) {
   process.exit(0);
 }
 await writeBotPid();
-log(`panel de control en ${control.url}`);
+log(`panel de control escuchando en 127.0.0.1:${botLockPort(port)}`);
 
 // Anyone can message a Telegram bot; only the chat id saved by `npm run
 // telegram` is obeyed. Everything else is dropped without a reply, so a
 // stranger cannot even tell that something is listening.
 const settings = await readTelegram();
 if (!settings) {
-  log('Telegram no está configurado. Ejecuta: npm run telegram -- <token del bot>');
+  log('Telegram no está configurado. Ejecuta: npm run telegram');
   process.exit(1);
+}
+const dueño = ownerCheck(settings);
+if (dueño.needsRebind) {
+  // Vinculada antes de que se guardara la identidad del dueño: no hay forma de
+  // saber quién lo era, así que no se obedece a nadie hasta rehacerla.
+  log('vinculación antigua sin dueño verificado: no obedeceré ninguna orden hasta revincular con npm run telegram');
+  const aviso = 'Pocket Terminal ya no acepta órdenes por aquí.\n\nLa vinculación se hizo sin comprobar quién eras, así que cualquiera del chat podía mandar. Vuelve a vincular en el ordenador con: npm run telegram';
+  try { await say(settings, aviso); } catch {}
 }
 
 const AYUDA = 'Órdenes que entiendo:\n\n/arrancar — abre el túnel y enciende Pocket Terminal\n/parar — cierra Pocket Terminal y el túnel\n/reiniciar — lo para y lo vuelve a abrir, con dirección y contraseña nuevas\n/estado — te digo si está en marcha\n/ayuda — esta lista';
@@ -91,10 +99,10 @@ async function escuchar() {
         // Pulsación de uno de los botones del aviso.
         const pulsacion = update.callback_query;
         if (pulsacion) {
-          const suyo = String(pulsacion.message?.chat?.id ?? pulsacion.from?.id) === String(settings.chatId);
+          const suyo = dueño.allowsCallback(pulsacion);
           // Contestar siempre, o el botón se queda dando vueltas en el móvil.
           try { await telegramCall(settings.botToken, 'answerCallbackQuery', { callback_query_id: pulsacion.id, text: suyo ? '' : 'No autorizado' }); } catch {}
-          if (!suyo) { log(`botón pulsado desde un chat ajeno (${pulsacion.from?.id})`); continue; }
+          if (!suyo) { log(`botón rechazado: usuario ${pulsacion.from?.id} en chat ${pulsacion.message?.chat?.id ?? 'sin contexto'}`); continue; }
           const orden = ordenes[`/${pulsacion.data}`];
           if (orden) { log(`botón pulsado: ${pulsacion.data}`); await orden(); }
           continue;
@@ -102,8 +110,10 @@ async function escuchar() {
 
         const message = update.message;
         if (!message?.text) continue;
-        if (String(message.chat.id) !== String(settings.chatId)) {
-          log(`mensaje ignorado de un chat ajeno (${message.chat.id})`);
+        // Autoriza la persona vinculada por privado, no el chat: en un grupo,
+        // cualquier miembro heredaba el permiso y podía pedir las credenciales.
+        if (!dueño.allowsMessage(message)) {
+          log(`mensaje rechazado: usuario ${message.from?.id} en chat ${message.chat?.id} (${message.chat?.type})`);
           // Warn at most once an hour so a stranger cannot flood the owner.
           if (Date.now() - avisadoDeIntrusos > 3600_000) {
             avisadoDeIntrusos = Date.now();
@@ -113,7 +123,7 @@ async function escuchar() {
         }
         const orden = ordenes[message.text.trim().split(/[\s@]/)[0].toLowerCase()];
         if (orden) { log(`orden recibida: ${message.text.trim()}`); await orden(); }
-        else await say(settings, AYUDA);
+        else await ayuda();
       }
     } catch (error) {
       log(`error hablando con Telegram: ${error.message}`);
@@ -127,5 +137,5 @@ async function escuchar() {
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
-log(`escuchando al bot; solo obedezco al chat ${settings.chatId}`);
+log(`escuchando al bot; solo obedezco a ${settings.ownerName ?? 'el dueño'} (id ${settings.ownerId ?? 'sin verificar'}) por privado`);
 await escuchar();

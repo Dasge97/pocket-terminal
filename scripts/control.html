@@ -131,13 +131,16 @@ function pintar() {
     fila(s.bot.running ? 'ok' : 'off', 'Bot de Telegram', s.bot.running ? `escuchando · proceso ${s.bot.pid ?? '?'}` : 'parado'),
     fila(s.task === 'registrada' ? 'ok' : 'bad', 'Arranque automático', s.task),
     fila(s.cloudflared ? 'ok' : 'bad', 'cloudflared', s.cloudflared ? 'instalado' : 'no instalado'),
-    fila(s.telegram ? 'ok' : 'bad', 'Telegram', s.telegram ? `chat ${s.telegram.chatId}` : 'sin configurar'),
+    fila(s.telegram && !s.telegram.needsRebind ? 'ok' : 'bad', 'Telegram', !s.telegram ? 'sin configurar'
+      : s.telegram.needsRebind ? 'vinculación antigua: revincula con npm run telegram'
+      : `${s.telegram.owner ?? 'vinculado'} · chat ${s.telegram.chatId}`),
     fila(s.web ? 'ok' : 'bad', 'Web compilada', s.web ? 'sí' : 'no'),
     fila('off', 'Node', `${s.node} · puerto ${s.port}`),
   ].join('');
 
   const avisos = [];
   if (s.orphan) avisos.push(`El puerto ${s.port} lo ocupa el proceso ${s.orphan}, que no he arrancado yo. Usa «Parar» para liberarlo.`);
+  if (s.telegram?.needsRebind) avisos.push('La vinculación de Telegram se hizo sin comprobar quién eras, así que el bot no obedece ninguna orden. Vuelve a vincular con: npm run telegram');
   if (s.strayTunnels?.length) avisos.push(`Hay ${s.strayTunnels.length} túnel(es) abiertos sin servidor detrás: ${s.strayTunnels.join(', ')}. Mantienen una dirección pública viva.`);
   $('avisos').innerHTML = avisos.map(t => `<p class="alert">${t}</p>`).join('');
 

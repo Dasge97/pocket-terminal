@@ -13,8 +13,12 @@ export class Auth {
     const now = Date.now();
     this.attempts = this.attempts.filter(t => now - t < 60_000);
     if (this.attempts.length >= 10 || this.pending >= 2) return { status: 429 };
+    // Una petición malformada no gasta cupo: si lo gastara, diez peticiones sin
+    // contraseña dejarían al dueño fuera durante un minuto sin haber probado
+    // ninguna clave. El límite existe para frenar la fuerza bruta, y la fuerza
+    // bruta necesita llegar a comprobar el hash.
+    if (typeof password !== 'string' || password.length < 1 || password.length > 1024) return { status: 400 };
     this.attempts.push(now);
-    if (typeof password !== 'string' || password.length < 1 || password.length > 1024) return { status: 401 };
     this.pending++;
     let valid;
     try {

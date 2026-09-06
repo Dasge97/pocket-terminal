@@ -112,13 +112,15 @@ PowerShell hereda el usuario, las variables y el perfil del proceso del servidor
 
 ## Encenderlo desde el móvil
 
-Crea un bot hablando con [@BotFather](https://t.me/BotFather), envíale `/newbot` y guarda el token:
+Crea un bot hablando con [@BotFather](https://t.me/BotFather), envíale `/newbot` y guarda el token. Después:
 
 ```powershell
-npm.cmd run telegram -- <token del bot>
+npm.cmd run telegram
 ```
 
-El comando espera a que escribas a tu bot, y así descubre a qué chat responder. Luego deja el bot escuchando desde que inicias sesión en Windows:
+Pide el token sin mostrarlo al escribir y enseña un **código de vinculación** de ocho caracteres. Mándale ese código al bot **por privado** dentro de cinco minutos. Solo queda autorizada la cuenta que envía el código, y a partir de ahí el bot no obedece a nadie más ni en ningún grupo.
+
+Luego deja el bot escuchando desde que inicias sesión en Windows:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Enable-BotAutostart.ps1
@@ -135,7 +137,9 @@ A partir de ahí, todo desde el chat:
 
 Con la dirección llegan cuatro botones para esas mismas cuatro acciones, así que no hace falta teclear nada.
 
-> **Un bot de Telegram es público: cualquiera puede escribirle.** Pocket Terminal solo obedece al chat guardado y descarta el resto sin contestar, de modo que un desconocido no recibe respuesta alguna.
+> **Un bot de Telegram es público: cualquiera puede escribirle.** Pocket Terminal solo obedece a la cuenta vinculada y solo por mensaje privado; descarta el resto sin contestar, de modo que un desconocido no recibe respuesta alguna.
+
+> **Tu cuenta de Telegram es parte de la seguridad del ordenador.** Quien pueda usarla puede pedir `/arrancar` y recibir la dirección y la contraseña. Protégela con verificación en dos pasos.
 
 ### Desde el ordenador
 

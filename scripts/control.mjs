@@ -1,11 +1,12 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { projectRoot } from '../server/config.mjs';
 import {
-  announce, botLogPath, hasCloudflared, readTelegram, startService, status,
-  stopProcess, stopService, strayTunnels, writeControlToken,
+  announce, botLogPath, hasCloudflared, ownerCheck, readTelegram, startService,
+  status, stopProcess, stopService, strayTunnels, writeControlToken,
 } from './runtime.mjs';
 
 const TASK = 'PocketTerminalBot';
@@ -36,7 +37,9 @@ async function fullStatus() {
     ...now,
     task: await taskState(),
     cloudflared: await hasCloudflared(),
-    telegram: telegram ? { chatId: telegram.chatId } : null,
+    // needsRebind avisa de una vinculación hecha antes de comprobar identidad:
+    // el bot no obedece hasta rehacerla, y conviene verlo aquí.
+    telegram: telegram ? { chatId: telegram.chatId, owner: telegram.ownerName ?? null, needsRebind: ownerCheck(telegram).needsRebind } : null,
     web: await readFile(resolve(projectRoot, 'dist/index.html')).then(() => true, () => false),
     node: process.version,
   };
@@ -100,7 +103,10 @@ const actions = {
 };
 
 export async function startControlServer(port, { onStopBot } = {}) {
-  const token = await writeControlToken();
+  // La clave se genera aquí pero no se publica hasta tener el puerto: un
+  // segundo arranque que fracasa no puede pisar la clave del panel que ya está
+  // funcionando, porque entonces el lanzador leería una clave que nadie acepta.
+  const token = randomBytes(24).toString('hex');
   const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   const page = await readFile(pagePath, 'utf8');
 
@@ -163,5 +169,8 @@ export async function startControlServer(port, { onStopBot } = {}) {
     server.listen(port, '127.0.0.1');
   });
   if (!listening) return null;
+  // El puerto ya es nuestro: ahora sí se puede publicar la clave sin riesgo de
+  // invalidar la de otra instancia.
+  await writeControlToken(token);
   return { server, token, url: `http://127.0.0.1:${port}/?k=${token}` };
 }
