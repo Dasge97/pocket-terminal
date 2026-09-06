@@ -6,7 +6,7 @@ $ProgressPreference = 'SilentlyContinue'
 $projectPath = Split-Path $PSScriptRoot -Parent
 $telegramConfig = Join-Path $projectPath '.pocket-terminal\telegram.json'
 if (-not (Test-Path $telegramConfig)) {
-    throw 'Configura Telegram primero: npm run telegram -- <token del bot>'
+    throw 'Configura Telegram primero: npm run telegram'
 }
 $node = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $node) { throw 'No encuentro node.exe en el PATH.' }

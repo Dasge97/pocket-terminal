@@ -30,12 +30,12 @@ log(`panel de control escuchando en 127.0.0.1:${botLockPort(port)}`);
 // Anyone can message a Telegram bot; only the chat id saved by `npm run
 // telegram` is obeyed. Everything else is dropped without a reply, so a
 // stranger cannot even tell that something is listening.
-const settings = await readTelegram();
+let settings = await readTelegram();
 if (!settings) {
   log('Telegram no está configurado. Ejecuta: npm run telegram');
   process.exit(1);
 }
-const dueño = ownerCheck(settings);
+let dueño = ownerCheck(settings);
 if (dueño.needsRebind) {
   // Vinculada antes de que se guardara la identidad del dueño: no hay forma de
   // saber quién lo era, así que no se obedece a nadie hasta rehacerla.
@@ -88,7 +88,26 @@ async function estado() {
 
 const ordenes = { '/arrancar': arrancar, '/parar': parar, '/reiniciar': reiniciar, '/estado': estado, '/ayuda': ayuda, '/start': ayuda };
 
-let offset = 0, avisadoDeIntrusos = 0;
+let offset = 0, avisadoDeIntrusos = 0, ultimoFallo = '';
+
+// Revocar el token en BotFather y volver a vincular deja a este proceso con el
+// token viejo en memoria, y Telegram contesta Unauthorized para siempre. Releer
+// el fichero recupera la vinculación nueva sin tener que reiniciar el bot.
+async function recargarVinculacion() {
+  const nuevo = await readTelegram();
+  if (!nuevo?.botToken || nuevo.botToken === settings.botToken) return false;
+  settings = nuevo;
+  dueño = ownerCheck(nuevo);
+  // Se descartan las órdenes que quedaron en cola mientras el token no valía,
+  // para no ejecutar de golpe lo que se escribió hace rato.
+  try {
+    const pendientes = await telegramCall(nuevo.botToken, 'getUpdates?offset=-1&timeout=0');
+    offset = pendientes.length ? pendientes.at(-1).update_id + 1 : 0;
+  } catch { offset = 0; }
+  log(`vinculación nueva cargada; solo obedezco a ${nuevo.ownerName ?? 'el dueño'} (id ${nuevo.ownerId ?? 'sin verificar'}) por privado`);
+  return true;
+}
+
 async function escuchar() {
   for (;;) {
     try {
@@ -125,8 +144,16 @@ async function escuchar() {
         if (orden) { log(`orden recibida: ${message.text.trim()}`); await orden(); }
         else await ayuda();
       }
+      ultimoFallo = '';
     } catch (error) {
-      log(`error hablando con Telegram: ${error.message}`);
+      const tokenRechazado = /unauthorized/i.test(error.message);
+      if (tokenRechazado && await recargarVinculacion()) { ultimoFallo = ''; continue; }
+      // El mismo fallo cada cinco segundos llenaba el registro de líneas
+      // iguales, así que solo se escribe cuando cambia.
+      const texto = tokenRechazado
+        ? 'Telegram rechaza el token. Si lo has revocado en BotFather, vuelve a vincular en el ordenador con: npm run telegram'
+        : `error hablando con Telegram: ${error.message}`;
+      if (texto !== ultimoFallo) { log(texto); ultimoFallo = texto; }
       await delay(5000);
     }
   }
