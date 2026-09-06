@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, readdir, rm, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, realpath, rm, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { createServer } from 'node:net';
@@ -16,7 +16,9 @@ async function freePort() {
   const port = server.address().port; await new Promise(resolve => server.close(resolve)); return port;
 }
 async function fixture(t) {
-  const cwd = await mkdtemp(join(tmpdir(), 'pocket-test-'));
+  // realpath: en Windows el temporal puede venir en formato corto 8.3 y el
+  // servidor siempre responde con la ruta larga, así que se compara la misma.
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), 'pocket-test-')));
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   const config = validateConfig({ port, publicOrigin: origin, defaultCwd: cwd, shell: process.execPath, shellArgs: [resolve('test/fixtures/terminal.mjs')], ...await hashPassword('test-password-only') });
@@ -39,8 +41,8 @@ function connect(f, id, cookie) {
   const messages = [];
   ws.on('message', data => messages.push(JSON.parse(data.toString())));
   ws.on('error', () => {});
-  const until = async predicate => {
-    const deadline = Date.now() + 8000;
+  const until = async (predicate, ms = 8000) => {
+    const deadline = Date.now() + ms;
     while (!predicate(messages)) {
       if (Date.now() > deadline) throw new Error(`No llegó la salida esperada: ${JSON.stringify(messages).slice(-1200)}`);
       await delay(20);
@@ -227,6 +229,10 @@ test('the picker creates a folder and refuses any name that could escape it', as
 test('a protected folder is reported as protected, not as missing', { skip: process.platform !== 'win32' }, async t => {
   const f = await fixture(t); const cookie = await f.login();
   const protegida = 'C:\\Windows\\System32\\config';
+  // A CI runner often runs elevated and can read this folder, which would make
+  // the assertion below fail for a reason that has nothing to do with the code.
+  const legible = await readdir(protegida).then(() => true, () => false);
+  if (legible) { t.skip('el proceso puede leer la carpeta de sistema elegida'); return; }
   const res = await f.request(`/api/browse?path=${encodeURIComponent(protegida)}`, { cookie });
   // Saying it does not exist sends the user looking for a mistake that is not there.
   assert.equal(res.status, 403);
@@ -279,12 +285,13 @@ test('password rate limit and HTTPS configuration fail closed', async () => {
   assert.equal((await auth.login('wrong')).status, 429);
 });
 
-test('Windows: PowerShell starts through ConPTY', { skip: process.platform !== 'win32', timeout: 15000 }, async t => {
+test('Windows: PowerShell starts through ConPTY', { skip: process.platform !== 'win32', timeout: 60_000 }, async t => {
   const f = await fixture(t);
   f.config.shell = 'powershell.exe';
   f.config.shellArgs = ['-NoLogo', '-NoProfile', '-Command', "Write-Output ('POCKET' + '_WINDOWS'); exit 0"];
   const cookie = await f.login(); const s = await f.app.sessions.create({});
   const a = connect(f, s.id, cookie);
-  await a.until(m => text(m).includes('POCKET_WINDOWS'));
-  await a.until(m => m.some(x => x.type === 'exit' || (x.type === 'snapshot' && x.exited)));
+  // Un runner de CI arranca PowerShell mucho más despacio que un equipo real.
+  await a.until(m => text(m).includes('POCKET_WINDOWS'), 45_000);
+  await a.until(m => m.some(x => x.type === 'exit' || (x.type === 'snapshot' && x.exited)), 45_000);
 });
