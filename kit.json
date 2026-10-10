@@ -1,0 +1,28 @@
+{
+  "kit": 1,
+  "paquete": "pocket-terminal",
+  "requisitos": [
+    { "comando": "node", "texto": "Node.js 24 con node en el PATH" }
+  ],
+  "instalar": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{dir}/scripts/Kit-Instalar.ps1\"",
+  "desinstalar": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{dir}/scripts/Kit-Desinstalar.ps1\"",
+
+  "id": "pocket-terminal-bot",
+  "nombre": "Pocket Terminal Bot",
+  "descripcion": "Escucha el bot de Telegram para arrancar Pocket Terminal desde el móvil.",
+  "tipo": "demonio",
+  "proyecto": "{dir}",
+  "estado_ruta": "{dir}/estado-ruta.txt",
+  "comprobar": {
+    "proceso_contiene": "{dir}/scripts/bot.mjs",
+    "tarea_windows": "PocketTerminalBot"
+  },
+  "acciones": {
+    "arrancar": "schtasks /Run /TN PocketTerminalBot",
+    "parar": null,
+    "abrir": null
+  },
+  "registro": "{dir}/.pocket-terminal/bot.log",
+  "caducidad_minutos": 10,
+  "ntfy": null
+}

@@ -15,3 +15,6 @@ Thumbs.db
 
 # Scripts de prueba temporales
 _*.mjs
+
+# Lo escribe KitDani al importar la herramienta
+estado-ruta.txt
